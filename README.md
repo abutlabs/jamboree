@@ -2,6 +2,17 @@
 
 Terminal UI for monitoring multiple node processes.
 
+## Usage
+
+**Expected folder structure:**
+- `jamixir/` and `jam-ui/` should be sibling directories
+- The app expects `node.sh` to exist in the `jamixir/` folder
+
+**Running:**
+```bash
+cargo run
+```
+
 ## Menu Controls
 
 - **`0-5`** - Toggle node visibility
