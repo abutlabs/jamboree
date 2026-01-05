@@ -120,7 +120,12 @@ impl Node {
                 // Cap buffer size (avoid RAM blowup)
                 if b.len() > 100_000 {
                     let drain = b.len() - 100_000;
-                    b.drain(..drain);
+                    // Find the nearest character boundary to avoid splitting UTF-8 characters
+                    let safe_drain = (0..=drain)
+                        .rev()
+                        .find(|&i| b.is_char_boundary(i))
+                        .unwrap_or(0);
+                    b.drain(..safe_drain);
                 }
             }
         });
