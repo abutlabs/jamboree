@@ -7,6 +7,7 @@ use ratatui::{
 use crate::AppState;
 use crate::node::Node;
 use crate::ui::highlight::highlight_text;
+use crate::ui::tags;
 pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState) {
     let visible: Vec<(usize, &Node)> = nodes
         .iter()
@@ -14,9 +15,17 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState) {
         .filter(|(i, _)| !app.hidden[*i])
         .collect();
 
+    // Layout: menu bar, optional tags bar, content
+    let has_tags = app.highlight.is_some() && !app.highlight.as_ref().unwrap().is_empty();
+    let constraints = if has_tags {
+        vec![Constraint::Length(1), Constraint::Length(1), Constraint::Min(0)]
+    } else {
+        vec![Constraint::Length(1), Constraint::Min(0)]
+    };
+    
     let layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(0)])
+        .constraints(constraints)
         .split(f.size());
 
     if visible.is_empty() {
@@ -34,16 +43,28 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState) {
             app.search_input
         )
     } else {
+        let tag_hint = if has_tags {
+            "  [←→ Tag Nav] [Del/BS Remove Tag]"
+        } else {
+            ""
+        };
         format!(
-            " [0-5] Toggle Node Visibility  [Tab] Focus  [/] Search  [Space] Pause All  [Enter] Zoom  [Q] Quit{}",
-            if app.paused { "  [PAUSED]" } else { "" }
+            " [0-5] Toggle Node Visibility  [Tab] Focus  [/] Search  [Space] Pause All  [Enter] Zoom  [Q] Quit{}{}",
+            if app.paused { "  [PAUSED]" } else { "" },
+            tag_hint
         )
     };
 
     let menu = Paragraph::new(menu_text).style(Style::default().bg(Color::Blue).fg(Color::White));
     f.render_widget(menu, layout[0]);
 
+    // ---- TAGS ----
+    if has_tags {
+        tags::render_tags(f, layout[1], app);
+    }
+
     // ---- GRID ----
+    let grid_area = if has_tags { layout[2] } else { layout[1] };
 
     let count = visible.len();
     let cols = (count as f64).sqrt().ceil() as usize;
@@ -53,7 +74,7 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState) {
     let row_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(row_constraints)
-        .split(layout[1]);
+        .split(grid_area);
 
     for r in 0..rows {
         let col_constraints = vec![Constraint::Percentage(100 / cols as u16); cols];
@@ -98,7 +119,7 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState) {
             };
 
             // ---- HIGHLIGHT ----
-            let content = highlight_text(&text, app.highlight.as_deref());
+            let content = highlight_text(&text, app.highlight.as_ref().map(|v| v.as_slice()));
 
             // ---- RENDER ----
             let widget = Paragraph::new(content).scroll((scroll_y, 0)).block(

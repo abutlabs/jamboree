@@ -62,7 +62,6 @@ async fn main() -> Result<()> {
                     match handle_key_event(
                         k.code,
                         &mut app,
-                        &mut view_mode,
                         &mut focused,
                         nodes.len(),
                     ) {

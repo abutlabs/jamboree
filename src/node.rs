@@ -70,6 +70,7 @@ impl Node {
     fn start_reader_task(&self, mut log_file: File) {
         let id = self.id;
         let buffer = self.buffer.clone();
+        let paused = self.paused.clone();
         let mut reader = match self.master.try_clone_reader() {
             Ok(r) => r,
             Err(_) => {
@@ -117,15 +118,18 @@ impl Node {
                 let mut b = buffer.lock().unwrap();
                 b.push_str(&clean_text);
 
-                // Cap buffer size (avoid RAM blowup)
-                if b.len() > 100_000 {
-                    let drain = b.len() - 100_000;
-                    // Find the nearest character boundary to avoid splitting UTF-8 characters
-                    let safe_drain = (0..=drain)
-                        .rev()
-                        .find(|&i| b.is_char_boundary(i))
-                        .unwrap_or(0);
-                    b.drain(..safe_drain);
+                // Cap buffer size (avoid RAM blowup) - but only when NOT paused
+                let is_paused = *paused.lock().unwrap();
+                if !is_paused {
+                    if b.len() > 100_000 {
+                        let drain = b.len() - 100_000;
+                        // Find the nearest character boundary to avoid splitting UTF-8 characters
+                        let safe_drain = (0..=drain)
+                            .rev()
+                            .find(|&i| b.is_char_boundary(i))
+                            .unwrap_or(0);
+                        b.drain(..safe_drain);
+                    }
                 }
             }
         });

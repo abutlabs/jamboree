@@ -11,7 +11,6 @@ pub enum Action {
 pub fn handle_key_event(
     key: KeyCode,
     app: &mut AppState,
-    _view_mode: &mut ViewMode,
     focused: &mut usize,
     node_count: usize,
 ) -> Action {
@@ -20,12 +19,31 @@ pub fn handle_key_event(
         return Action::Continue; // Don't fall through to main key handling
     }
 
+    // Handle tag navigation if tags exist
+    if app.highlight.is_some() && !app.highlight.as_ref().unwrap().is_empty() {
+        match key {
+            KeyCode::Left => {
+                app.select_prev_tag();
+                return Action::Continue;
+            }
+            KeyCode::Right => {
+                app.select_next_tag();
+                return Action::Continue;
+            }
+            KeyCode::Delete | KeyCode::Backspace => {
+                app.remove_selected_tag();
+                return Action::Continue;
+            }
+            _ => {}
+        }
+    }
+
     // Main key handling
     match key {
         KeyCode::Char('/') => {
             app.search_mode = true;
-            if let Some(ref current) = app.highlight {
-                app.search_input = current.clone();
+            if let Some(ref terms) = app.highlight {
+                app.search_input = terms.iter().map(|(term, _)| term.as_str()).collect::<Vec<_>>().join(", ");
             }
         }
         KeyCode::Char(' ') => {
