@@ -8,6 +8,7 @@ pub struct AppState {
     pub paused: bool,
     pub frozen_scroll: RefCell<Vec<u16>>, // one per node
     pub hidden: Vec<bool>,
+    pub log_viewer_mode: bool, // true when loading from log files instead of running nodes
 
     pub search_mode: bool,
     pub search_input: String,
@@ -96,6 +97,28 @@ impl AppState {
         Self {
             paused: false,
             frozen_scroll: RefCell::new(vec![0; node_count]),
+            log_viewer_mode: false,
+            search_mode: false,
+            search_input,
+            highlight,
+            hidden: vec![false; node_count],
+            selected_tag,
+        }
+    }
+
+    pub fn new_log_viewer(node_count: usize, search: Option<String>) -> Self {
+        let search_input = search.unwrap_or_default();
+        let highlight = Self::apply_search(&search_input, None);
+        let selected_tag = if highlight.is_some() && !highlight.as_ref().unwrap().is_empty() {
+            Some(0)
+        } else {
+            None
+        };
+
+        Self {
+            paused: false, // Not used in log viewer mode
+            frozen_scroll: RefCell::new(vec![0; node_count]),
+            log_viewer_mode: true,
             search_mode: false,
             search_input,
             highlight,

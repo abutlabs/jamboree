@@ -36,17 +36,40 @@ async fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout());
     let mut terminal = Terminal::new(backend)?;
 
-    // Create timestamped log directory
-    let datetime = Local::now().format("%Y%m%d_%H%M%S").to_string();
-    let log_dir = PathBuf::from("logs").join(datetime);
-    std::fs::create_dir_all(&log_dir)?;
-
-    let nodes = (0..6)
-        .map(|id| Node::spawn(id, &log_dir))
-        .collect::<Result<Vec<Node>>>()?;
-
     let cli = Cli::parse();
-    let mut app = AppState::new(nodes.len(), cli.search);
+
+    let (nodes, mut app) = if let Some(log_folder) = &cli.log_folder {
+        // Log viewer mode: load from log files
+        let log_dir = PathBuf::from(log_folder);
+        let mut nodes = Vec::new();
+        
+        // Try to load node_0.log through node_5.log
+        for id in 0..6 {
+            let log_path = log_dir.join(format!("node_{}.log", id));
+            if log_path.exists() {
+                nodes.push(Node::from_log_file(id, &log_path)?);
+            }
+        }
+        
+        if nodes.is_empty() {
+            anyhow::bail!("No log files found in {}", log_folder);
+        }
+        
+        let app = AppState::new_log_viewer(nodes.len(), cli.search);
+        (nodes, app)
+    } else {
+        // Normal mode: spawn nodes
+        let datetime = Local::now().format("%Y%m%d_%H%M%S").to_string();
+        let log_dir = PathBuf::from("logs").join(datetime);
+        std::fs::create_dir_all(&log_dir)?;
+
+        let nodes = (0..6)
+            .map(|id| Node::spawn(id, &log_dir))
+            .collect::<Result<Vec<Node>>>()?;
+
+        let app = AppState::new(nodes.len(), cli.search);
+        (nodes, app)
+    };
 
     let mut focused = 0usize;
 

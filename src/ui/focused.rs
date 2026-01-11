@@ -7,6 +7,7 @@ use ratatui::{
 use crate::AppState;
 use crate::node::Node;
 use crate::ui::highlight::highlight_text;
+use crate::ui::menus;
 use crate::ui::tags;
 
 pub fn render(f: &mut Frame, node: &Node, app: &AppState) {
@@ -27,30 +28,7 @@ pub fn render(f: &mut Frame, node: &Node, app: &AppState) {
         .constraints(constraints)
         .split(f.size());
 
-    let menu_text = if app.search_mode {
-        format!(
-            " Search: {}_  [Enter] Apply  [Esc] Cancel ",
-            app.search_input
-        )
-    } else {
-        let search_indicator = if let Some(ref terms) = app.highlight {
-            let term_strings: Vec<&str> = terms.iter().map(|(term, _)| term.as_str()).collect();
-            format!(" [Search: {}]", term_strings.join(", "))
-        } else {
-            String::new()
-        };
-        let tag_hint = if has_tags {
-            "  [←→ Tag Nav] [Del/BS Remove]"
-        } else {
-            ""
-        };
-        format!(
-            " [Esc] Grid  [/] Search  [Space] Pause  [↑↓ PgUp PgDn] Scroll  [X] Shutdown All  [Q] Quit {}{}{}",
-            if app.paused { " [PAUSED]" } else { "" },
-            search_indicator,
-            tag_hint
-        )
-    };
+    let menu_text = menus::focused_menu(app, has_tags);
 
     let menu =
         Paragraph::new(menu_text).style(Style::default().bg(Color::DarkGray).fg(Color::White));
@@ -96,7 +74,7 @@ pub fn render(f: &mut Frame, node: &Node, app: &AppState) {
 
     let paused = *node.paused.lock().unwrap();
 
-    let scroll_y = if app.paused {
+    let scroll_y = if app.paused || app.log_viewer_mode {
         app.frozen_scroll.borrow()[node.id]
     } else {
         let s = total_wrapped_lines.saturating_sub(visible_lines).min(10000) as u16;

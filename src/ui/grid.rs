@@ -7,6 +7,7 @@ use ratatui::{
 use crate::AppState;
 use crate::node::Node;
 use crate::ui::highlight::highlight_text;
+use crate::ui::menus;
 use crate::ui::tags;
 pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState) {
     let visible: Vec<(usize, &Node)> = nodes
@@ -41,23 +42,7 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState) {
     }
 
     // ---- MENU BAR ----
-    let menu_text = if app.search_mode {
-        format!(
-            " Search: {}_  [Enter] Apply  [Esc] Cancel ",
-            app.search_input
-        )
-    } else {
-        let tag_hint = if has_tags {
-            "  [←→ Tag Nav] [Del/BS Remove Tag]"
-        } else {
-            ""
-        };
-        format!(
-            " [0-5] Toggle Node Visibility  [Tab] Focus  [/] Search  [Space] Pause All  [Enter] Zoom  [X] Shutdown All  [Q] Quit{}{}",
-            if app.paused { "  [PAUSED]" } else { "" },
-            tag_hint
-        )
-    };
+    let menu_text = menus::grid_menu(app, has_tags);
 
     let menu = Paragraph::new(menu_text).style(Style::default().bg(Color::Blue).fg(Color::White));
     f.render_widget(menu, layout[0]);
@@ -114,7 +99,7 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState) {
             // ---- SCROLL LOGIC (EXACT, NO WRAP) ----
             let line_count = text.bytes().filter(|&b| b == b'\n').count();
 
-            let scroll_y = if app.paused {
+            let scroll_y = if app.paused || app.log_viewer_mode {
                 app.frozen_scroll.borrow()[node_idx]
             } else {
                 let s = line_count.saturating_sub(visible_lines).min(10_000) as u16;

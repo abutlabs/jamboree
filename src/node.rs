@@ -12,7 +12,7 @@ use tokio::task;
 
 pub struct Node {
     pub id: usize,
-    master: Box<dyn MasterPty + Send>,
+    master: Option<Box<dyn MasterPty + Send>>,
     buffer: Arc<Mutex<String>>,
     paused_buffer: Arc<Mutex<String>>,
     current_size: Arc<Mutex<PtySize>>,
@@ -53,7 +53,7 @@ impl Node {
 
         let node = Node {
             id,
-            master,
+            master: Some(master),
             buffer,
             paused_buffer,
             current_size,
@@ -77,7 +77,7 @@ impl Node {
         let buffer = self.buffer.clone();
         let paused_buffer = self.paused_buffer.clone();
         let paused = self.paused.clone();
-        let mut reader = match self.master.try_clone_reader() {
+        let mut reader = match self.master.as_ref().unwrap().try_clone_reader() {
             Ok(r) => r,
             Err(_) => {
                 let crash_msg = format!("\n[Node {} failed to create reader]\n", id);
@@ -145,11 +145,46 @@ impl Node {
     }
 
     pub fn resize_pty_if_needed(&self, new_size: PtySize) {
-        let mut current = self.current_size.lock().unwrap();
-        if current.rows != new_size.rows || current.cols != new_size.cols {
-            let _ = self.master.resize(new_size.clone());
-            *current = new_size;
+        if let Some(ref master) = self.master {
+            let mut current = self.current_size.lock().unwrap();
+            if current.rows != new_size.rows || current.cols != new_size.cols {
+                let _ = master.resize(new_size.clone());
+                *current = new_size;
+            }
         }
+    }
+
+    /// Load node from log file (for log viewer mode)
+    pub fn from_log_file(id: usize, log_path: &PathBuf) -> Result<Self> {
+        let buffer = Arc::new(Mutex::new(String::new()));
+        let paused_buffer = Arc::new(Mutex::new(String::new()));
+        let current_size = Arc::new(Mutex::new(PtySize {
+            rows: 24,
+            cols: 80,
+            pixel_width: 0,
+            pixel_height: 0,
+        }));
+        let paused = Arc::new(Mutex::new(false));
+        let process_id = Arc::new(None);
+
+        let node = Node {
+            id,
+            master: None,
+            buffer,
+            paused_buffer,
+            current_size,
+            paused,
+            process_id,
+        };
+
+        // Load log file content
+        if log_path.exists() {
+            let content = std::fs::read_to_string(log_path)?;
+            let mut b = node.buffer.lock().unwrap();
+            *b = content;
+        }
+
+        Ok(node)
     }
 
     pub fn get_text_tail(&self, max_bytes: usize) -> String {

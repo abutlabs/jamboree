@@ -51,24 +51,32 @@ pub fn handle_key_event(
                     .join(", ");
             }
         }
-        KeyCode::Char(' ') => {
+        KeyCode::Char(' ') if !app.log_viewer_mode => {
             app.toggle_pause(nodes);
         }
-        KeyCode::Char('x') => {
+        KeyCode::Char('x') if !app.log_viewer_mode => {
             app.shutdown_all_nodes(nodes);
         }
         KeyCode::Char('q') => {
             return Action::Quit;
         }
-        KeyCode::Tab => *focused = (*focused + 1) % 6,
-        KeyCode::BackTab => *focused = (*focused + 5) % 6,
+        KeyCode::Tab => *focused = (*focused + 1) % nodes.len(),
+        KeyCode::BackTab => *focused = (*focused + nodes.len() - 1) % nodes.len(),
         KeyCode::Enter => {
             return Action::ChangeView(ViewMode::Focused(*focused));
         }
-        KeyCode::Up if app.paused => app.scroll_delta(*focused, -1),
-        KeyCode::Down if app.paused => app.scroll_delta(*focused, 1),
-        KeyCode::PageUp if app.paused => app.scroll_delta(*focused, -10),
-        KeyCode::PageDown if app.paused => app.scroll_delta(*focused, 10),
+        KeyCode::Up if app.paused || app.log_viewer_mode => {
+            app.scroll_delta(*focused, -1);
+        }
+        KeyCode::Down if app.paused || app.log_viewer_mode => {
+            app.scroll_delta(*focused, 1);
+        }
+        KeyCode::PageUp if app.paused || app.log_viewer_mode => {
+            app.scroll_delta(*focused, -10);
+        }
+        KeyCode::PageDown if app.paused || app.log_viewer_mode => {
+            app.scroll_delta(*focused, 10);
+        }
         KeyCode::Char(c @ '0'..='5') => {
             let idx = (c as usize) - ('0' as usize);
             if idx < nodes.len() {
@@ -85,7 +93,7 @@ pub fn handle_key_event(
 }
 
 pub fn handle_mouse_event(mouse: MouseEventKind, app: &mut AppState, focused: usize) -> Action {
-    if !app.paused {
+    if !app.paused && !app.log_viewer_mode {
         return Action::Continue;
     }
 
