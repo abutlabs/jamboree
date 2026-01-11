@@ -2,7 +2,7 @@
 
 Terminal UI for monitoring multiple node processes.
 
-<img width="2862" height="1572" alt="Image" src="https://github.com/user-attachments/assets/29b5ef57-5c6f-46c3-983e-5f387fe8bdec" />
+<img width="2145" height="1179" alt="Image" src="https://github.com/user-attachments/assets/29b5ef57-5c6f-46c3-983e-5f387fe8bdec" />
 
 ## Usage
 
