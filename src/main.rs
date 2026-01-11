@@ -1,12 +1,15 @@
 mod app;
+mod cli;
 mod event;
 mod node;
 mod ui;
 
 use crate::app::AppState;
+use crate::cli::Cli;
 use crate::node::Node;
 use anyhow::Result;
 use chrono::Local;
+use clap::Parser;
 use crossterm::{
     event::{Event, poll, read},
     execute,
@@ -42,7 +45,8 @@ async fn main() -> Result<()> {
         .map(|id| Node::spawn(id, &log_dir))
         .collect::<Result<Vec<Node>>>()?;
 
-    let mut app = AppState::new(nodes.len());
+    let cli = Cli::parse();
+    let mut app = AppState::new(nodes.len(), cli.search);
 
     let mut focused = 0usize;
 

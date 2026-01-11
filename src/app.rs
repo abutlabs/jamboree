@@ -16,15 +16,91 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(node_count: usize) -> Self {
+    fn apply_search(
+        search_input: &str,
+        existing_highlight: Option<&Vec<(String, usize)>>,
+    ) -> Option<Vec<(String, usize)>> {
+        if search_input.is_empty() {
+            return None;
+        }
+
+        // Parse comma-separated terms, trim whitespace, limit to 6
+        let new_terms: Vec<String> = search_input
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .take(6)
+            .collect();
+
+        if new_terms.is_empty() {
+            return None;
+        }
+
+        // Preserve colors of existing tags, assign new colors to new tags
+        let existing: HashMap<String, usize> = existing_highlight
+            .map(|tags| {
+                tags.iter()
+                    .map(|(term, color)| (term.clone(), *color))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        // Find the highest existing color index
+        let max_color = existing.values().max().copied().unwrap_or(0);
+
+        // Find next available color, but reuse colors if we have fewer than 6 tags
+        let mut used_colors: Vec<usize> = existing.values().copied().collect();
+        used_colors.sort();
+        let mut next_color = 0;
+
+        let mut terms: Vec<(String, usize)> = Vec::new();
+
+        for term in new_terms {
+            if let Some(&color) = existing.get(&term) {
+                // Term already exists, preserve its color
+                terms.push((term, color));
+            } else {
+                // New term, find next available color (0-5)
+                // First try max_color + 1, but if that's taken, find first unused
+                while next_color < 6 && used_colors.contains(&next_color) {
+                    next_color += 1;
+                }
+                let color = if next_color < 6 {
+                    let assigned = next_color;
+                    used_colors.push(assigned);
+                    next_color += 1;
+                    assigned
+                } else {
+                    // Fallback: use max_color + 1, capped at 5
+                    (max_color + 1).min(5)
+                };
+                terms.push((term, color));
+            }
+        }
+
+        Some(terms)
+    }
+
+    pub fn new(node_count: usize, search: Option<String>) -> Self {
+        let search_input = search.unwrap_or_default();
+
+        // Process CLI search string to create highlight tags
+        let highlight = Self::apply_search(&search_input, None);
+
+        let selected_tag = if highlight.is_some() && !highlight.as_ref().unwrap().is_empty() {
+            Some(0)
+        } else {
+            None
+        };
+
         Self {
             paused: false,
             frozen_scroll: RefCell::new(vec![0; node_count]),
             search_mode: false,
-            search_input: String::new(),
-            highlight: None,
+            search_input,
+            highlight,
             hidden: vec![false; node_count],
-            selected_tag: None,
+            selected_tag,
         }
     }
 
@@ -35,68 +111,7 @@ impl AppState {
                 self.search_input.clear();
             }
             KeyCode::Enter => {
-                self.highlight = if self.search_input.is_empty() {
-                    None
-                } else {
-                    // Parse comma-separated terms, trim whitespace, limit to 6
-                    let new_terms: Vec<String> = self
-                        .search_input
-                        .split(',')
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty())
-                        .take(6)
-                        .collect();
-
-                    if new_terms.is_empty() {
-                        None
-                    } else {
-                        // Preserve colors of existing tags, assign new colors to new tags
-                        let existing: HashMap<String, usize> = self
-                            .highlight
-                            .as_ref()
-                            .map(|tags| {
-                                tags.iter()
-                                    .map(|(term, color)| (term.clone(), *color))
-                                    .collect()
-                            })
-                            .unwrap_or_default();
-
-                        // Find the highest existing color index
-                        let max_color = existing.values().max().copied().unwrap_or(0);
-
-                        // Find next available color, but reuse colors if we have fewer than 6 tags
-                        let mut used_colors: Vec<usize> = existing.values().copied().collect();
-                        used_colors.sort();
-                        let mut next_color = 0;
-
-                        let mut terms: Vec<(String, usize)> = Vec::new();
-
-                        for term in new_terms {
-                            if let Some(&color) = existing.get(&term) {
-                                // Term already exists, preserve its color
-                                terms.push((term, color));
-                            } else {
-                                // New term, find next available color (0-5)
-                                // First try max_color + 1, but if that's taken, find first unused
-                                while next_color < 6 && used_colors.contains(&next_color) {
-                                    next_color += 1;
-                                }
-                                let color = if next_color < 6 {
-                                    let assigned = next_color;
-                                    used_colors.push(assigned);
-                                    next_color += 1;
-                                    assigned
-                                } else {
-                                    // Fallback: use max_color + 1, capped at 5
-                                    (max_color + 1).min(5)
-                                };
-                                terms.push((term, color));
-                            }
-                        }
-
-                        Some(terms)
-                    }
-                };
+                self.highlight = Self::apply_search(&self.search_input, self.highlight.as_ref());
                 // Initialize selected tag to first tag when tags are created
                 if self.highlight.is_some() && !self.highlight.as_ref().unwrap().is_empty() {
                     self.selected_tag = Some(0);
