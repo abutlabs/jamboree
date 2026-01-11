@@ -13,6 +13,7 @@ pub struct Node {
     pub id: usize,
     master: Box<dyn MasterPty + Send>,
     buffer: Arc<Mutex<String>>,
+    paused_buffer: Arc<Mutex<String>>,
     current_size: Arc<Mutex<PtySize>>,
     pub paused: Arc<Mutex<bool>>,
 }
@@ -40,6 +41,7 @@ impl Node {
         pair.slave.spawn_command(cmd)?;
 
         let buffer = Arc::new(Mutex::new(String::new()));
+        let paused_buffer = Arc::new(Mutex::new(String::new()));
         let current_size = Arc::new(Mutex::new(PtySize {
             rows: 24,
             cols: 80,
@@ -52,6 +54,7 @@ impl Node {
             id,
             master,
             buffer,
+            paused_buffer,
             current_size,
             paused,
         };
@@ -70,6 +73,7 @@ impl Node {
     fn start_reader_task(&self, mut log_file: File) {
         let id = self.id;
         let buffer = self.buffer.clone();
+        let paused_buffer = self.paused_buffer.clone();
         let paused = self.paused.clone();
         let mut reader = match self.master.try_clone_reader() {
             Ok(r) => r,
@@ -115,15 +119,18 @@ impl Node {
                 let _ = log_file.write_all(clean_text.as_bytes());
 
                 // Append to UI buffer
-                let mut b = buffer.lock().unwrap();
-                b.push_str(&clean_text);
-
-                // Cap buffer size (avoid RAM blowup) - but only when NOT paused
                 let is_paused = *paused.lock().unwrap();
-                if !is_paused {
+
+                if is_paused {
+                    let mut pb = paused_buffer.lock().unwrap();
+                    pb.push_str(&clean_text);
+                } else {
+                    let mut b = buffer.lock().unwrap();
+                    b.push_str(&clean_text);
+
+                    // cap ONLY main buffer
                     if b.len() > 100_000 {
                         let drain = b.len() - 100_000;
-                        // Find the nearest character boundary to avoid splitting UTF-8 characters
                         let safe_drain = (0..=drain)
                             .rev()
                             .find(|&i| b.is_char_boundary(i))
@@ -154,5 +161,16 @@ impl Node {
         } else {
             b.clone()
         }
+    }
+
+    pub fn flush_paused_buffer(&self) {
+        let mut paused = self.paused_buffer.lock().unwrap();
+        if paused.is_empty() {
+            return;
+        }
+
+        let mut main = self.buffer.lock().unwrap();
+        main.push_str(&paused);
+        paused.clear();
     }
 }

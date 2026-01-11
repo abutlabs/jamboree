@@ -13,11 +13,15 @@ pub fn render(f: &mut Frame, node: &Node, app: &AppState) {
     // Layout: menu bar, optional tags bar, content
     let has_tags = app.highlight.is_some() && !app.highlight.as_ref().unwrap().is_empty();
     let constraints = if has_tags {
-        vec![Constraint::Length(1), Constraint::Length(1), Constraint::Min(0)]
+        vec![
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(0),
+        ]
     } else {
         vec![Constraint::Length(1), Constraint::Min(0)]
     };
-    
+
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints(constraints)

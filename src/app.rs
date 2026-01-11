@@ -2,6 +2,8 @@ use crossterm::event::KeyCode;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
+use crate::node::Node;
+
 pub struct AppState {
     pub paused: bool,
     pub frozen_scroll: RefCell<Vec<u16>>, // one per node
@@ -37,32 +39,38 @@ impl AppState {
                     None
                 } else {
                     // Parse comma-separated terms, trim whitespace, limit to 6
-                    let new_terms: Vec<String> = self.search_input
+                    let new_terms: Vec<String> = self
+                        .search_input
                         .split(',')
                         .map(|s| s.trim().to_string())
                         .filter(|s| !s.is_empty())
                         .take(6)
                         .collect();
-                    
+
                     if new_terms.is_empty() {
                         None
                     } else {
                         // Preserve colors of existing tags, assign new colors to new tags
-                        let existing: HashMap<String, usize> = self.highlight
+                        let existing: HashMap<String, usize> = self
+                            .highlight
                             .as_ref()
-                            .map(|tags| tags.iter().map(|(term, color)| (term.clone(), *color)).collect())
+                            .map(|tags| {
+                                tags.iter()
+                                    .map(|(term, color)| (term.clone(), *color))
+                                    .collect()
+                            })
                             .unwrap_or_default();
-                        
+
                         // Find the highest existing color index
                         let max_color = existing.values().max().copied().unwrap_or(0);
-                        
+
                         // Find next available color, but reuse colors if we have fewer than 6 tags
                         let mut used_colors: Vec<usize> = existing.values().copied().collect();
                         used_colors.sort();
                         let mut next_color = 0;
-                        
+
                         let mut terms: Vec<(String, usize)> = Vec::new();
-                        
+
                         for term in new_terms {
                             if let Some(&color) = existing.get(&term) {
                                 // Term already exists, preserve its color
@@ -85,7 +93,7 @@ impl AppState {
                                 terms.push((term, color));
                             }
                         }
-                        
+
                         Some(terms)
                     }
                 };
@@ -107,11 +115,22 @@ impl AppState {
         }
     }
 
-    pub fn toggle_pause(&mut self) {
+    pub fn toggle_pause(&mut self, nodes: &[Node]) {
         let was_paused = self.paused;
         self.paused = !self.paused;
-        if !self.paused && was_paused {
-            // Clear frozen scroll when unpausing
+        if self.paused {
+            // entering pause
+            for n in nodes {
+                *n.paused.lock().unwrap() = true;
+            }
+        } else {
+            // leaving pause
+            for n in nodes {
+                *n.paused.lock().unwrap() = false;
+                n.flush_paused_buffer();
+            }
+
+            // reset frozen scroll
             for s in self.frozen_scroll.borrow_mut().iter_mut() {
                 *s = 0;
             }
@@ -172,4 +191,3 @@ impl AppState {
         }
     }
 }
-

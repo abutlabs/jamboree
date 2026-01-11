@@ -1,5 +1,6 @@
 use crate::AppState;
 use crate::ViewMode;
+use crate::node::Node;
 use crossterm::event::{KeyCode, MouseEventKind};
 
 pub enum Action {
@@ -12,7 +13,7 @@ pub fn handle_key_event(
     key: KeyCode,
     app: &mut AppState,
     focused: &mut usize,
-    node_count: usize,
+    nodes: &[Node],
 ) -> Action {
     if app.search_mode {
         app.handle_search_key(key);
@@ -43,11 +44,15 @@ pub fn handle_key_event(
         KeyCode::Char('/') => {
             app.search_mode = true;
             if let Some(ref terms) = app.highlight {
-                app.search_input = terms.iter().map(|(term, _)| term.as_str()).collect::<Vec<_>>().join(", ");
+                app.search_input = terms
+                    .iter()
+                    .map(|(term, _)| term.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
             }
         }
         KeyCode::Char(' ') => {
-            app.toggle_pause();
+            app.toggle_pause(nodes);
         }
         KeyCode::Char('q') => {
             return Action::Quit;
@@ -63,7 +68,7 @@ pub fn handle_key_event(
         KeyCode::PageDown if app.paused => app.scroll_delta(*focused, 10),
         KeyCode::Char(c @ '0'..='5') => {
             let idx = (c as usize) - ('0' as usize);
-            if idx < node_count {
+            if idx < nodes.len() {
                 app.hidden[idx] = !app.hidden[idx];
             }
         }

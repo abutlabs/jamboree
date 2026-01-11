@@ -59,12 +59,7 @@ async fn main() -> Result<()> {
         if poll(Duration::from_millis(50))? {
             match read()? {
                 Event::Key(k) => {
-                    match handle_key_event(
-                        k.code,
-                        &mut app,
-                        &mut focused,
-                        nodes.len(),
-                    ) {
+                    match handle_key_event(k.code, &mut app, &mut focused, &nodes) {
                         Action::Quit => {
                             // Cleanup and exit
                             let _ = disable_raw_mode();
