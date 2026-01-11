@@ -53,7 +53,7 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState) {
             ""
         };
         format!(
-            " [0-5] Toggle Node Visibility  [Tab] Focus  [/] Search  [Space] Pause All  [Enter] Zoom  [Q] Quit{}{}",
+            " [0-5] Toggle Node Visibility  [Tab] Focus  [/] Search  [Space] Pause All  [Enter] Zoom  [X] Shutdown All  [Q] Quit{}{}",
             if app.paused { "  [PAUSED]" } else { "" },
             tag_hint
         )

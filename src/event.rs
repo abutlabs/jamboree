@@ -54,6 +54,9 @@ pub fn handle_key_event(
         KeyCode::Char(' ') => {
             app.toggle_pause(nodes);
         }
+        KeyCode::Char('x') => {
+            app.shutdown_all_nodes(nodes);
+        }
         KeyCode::Char('q') => {
             return Action::Quit;
         }

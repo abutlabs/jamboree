@@ -4,6 +4,7 @@ use std::{
     fs::{File, OpenOptions},
     io::{Read, Write},
     path::PathBuf,
+    process,
     sync::{Arc, Mutex},
 };
 use strip_ansi_escapes::strip;
@@ -16,6 +17,7 @@ pub struct Node {
     paused_buffer: Arc<Mutex<String>>,
     current_size: Arc<Mutex<PtySize>>,
     pub paused: Arc<Mutex<bool>>,
+    process_id: Arc<Option<u32>>,
 }
 
 impl Node {
@@ -38,8 +40,6 @@ impl Node {
         cmd.arg(id.to_string());
         cmd.cwd(&jamixir_root);
 
-        pair.slave.spawn_command(cmd)?;
-
         let buffer = Arc::new(Mutex::new(String::new()));
         let paused_buffer = Arc::new(Mutex::new(String::new()));
         let current_size = Arc::new(Mutex::new(PtySize {
@@ -49,6 +49,7 @@ impl Node {
             pixel_height: 0,
         }));
         let paused = Arc::new(Mutex::new(false));
+        let process_id = Arc::new(pair.slave.spawn_command(cmd)?.process_id());
 
         let node = Node {
             id,
@@ -57,6 +58,7 @@ impl Node {
             paused_buffer,
             current_size,
             paused,
+            process_id,
         };
 
         // Start the reader task
@@ -172,5 +174,31 @@ impl Node {
         let mut main = self.buffer.lock().unwrap();
         main.push_str(&paused);
         paused.clear();
+    }
+
+    pub fn shutdown(&self) {
+        // Kill the process using its PID
+        if let Some(pid) = *self.process_id {
+            #[cfg(unix)]
+            {
+                let _ = process::Command::new("kill")
+                    .arg("-TERM")
+                    .arg(pid.to_string())
+                    .output();
+            }
+            #[cfg(windows)]
+            {
+                let _ = process::Command::new("taskkill")
+                    .arg("/PID")
+                    .arg(pid.to_string())
+                    .arg("/F")
+                    .output();
+            }
+        }
+
+        // Add shutdown message to buffer
+        let shutdown_msg = format!("\n[Node {} shutdown by user]\n", self.id);
+        let mut b = self.buffer.lock().unwrap();
+        b.push_str(&shutdown_msg);
     }
 }

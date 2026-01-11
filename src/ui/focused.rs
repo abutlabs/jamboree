@@ -45,7 +45,7 @@ pub fn render(f: &mut Frame, node: &Node, app: &AppState) {
             ""
         };
         format!(
-            " [Esc] Grid  [/] Search  [Space] Pause  [↑↓ PgUp PgDn] Scroll  [Q] Quit {}{}{}",
+            " [Esc] Grid  [/] Search  [Space] Pause  [↑↓ PgUp PgDn] Scroll  [X] Shutdown All  [Q] Quit {}{}{}",
             if app.paused { " [PAUSED]" } else { "" },
             search_indicator,
             tag_hint

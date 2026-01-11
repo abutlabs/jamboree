@@ -131,7 +131,6 @@ impl AppState {
     }
 
     pub fn toggle_pause(&mut self, nodes: &[Node]) {
-        let was_paused = self.paused;
         self.paused = !self.paused;
         if self.paused {
             // entering pause
@@ -203,6 +202,19 @@ impl AppState {
         if let Some(idx) = self.selected_tag {
             self.remove_tag(idx);
             // After removal, selected_tag is adjusted by remove_tag
+        }
+    }
+
+    /// Shutdown all nodes and auto-trigger pause
+    pub fn shutdown_all_nodes(&mut self, nodes: &[Node]) {
+        // Shutdown all nodes
+        for node in nodes {
+            node.shutdown();
+        }
+        
+        // Auto-trigger pause if not already paused
+        if !self.paused {
+            self.toggle_pause(nodes);
         }
     }
 }
