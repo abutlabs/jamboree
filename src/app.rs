@@ -234,7 +234,7 @@ impl AppState {
         for node in nodes {
             node.shutdown();
         }
-        
+
         // Auto-trigger pause if not already paused
         if !self.paused {
             self.toggle_pause(nodes);

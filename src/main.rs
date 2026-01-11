@@ -42,7 +42,7 @@ async fn main() -> Result<()> {
         // Log viewer mode: load from log files
         let log_dir = PathBuf::from(log_folder);
         let mut nodes = Vec::new();
-        
+
         // Try to load node_0.log through node_5.log
         for id in 0..6 {
             let log_path = log_dir.join(format!("node_{}.log", id));
@@ -50,11 +50,11 @@ async fn main() -> Result<()> {
                 nodes.push(Node::from_log_file(id, &log_path)?);
             }
         }
-        
+
         if nodes.is_empty() {
             anyhow::bail!("No log files found in {}", log_folder);
         }
-        
+
         let app = AppState::new_log_viewer(nodes.len(), cli.search);
         (nodes, app)
     } else {
