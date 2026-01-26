@@ -4,6 +4,7 @@ mod event;
 mod node;
 mod summary;
 mod ui;
+mod utils;
 
 use crate::app::AppState;
 use crate::cli::Cli;
@@ -12,6 +13,7 @@ use anyhow::Result;
 use chrono::Local;
 use clap::Parser;
 use crossterm::{
+    cursor::{Hide, Show},
     event::{Event, poll, read},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
@@ -49,17 +51,40 @@ pub enum ViewMode {
     Grid,
     Focused(usize),
 }
+
+struct TerminalGuard;
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+        let _ = execute!(stdout(), LeaveAlternateScreen, Show);
+    }
+}
+
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
+    // Parse CLI first, before terminal setup (so --help works properly)
+    let cli = Cli::parse();
+
+    // Clean up any leftover build lock from incomplete previous builds
+    utils::cleanup_build_lock();
+
+    if let Err(e) = run_app(cli).await {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
+async fn run_app(cli: Cli) -> Result<()> {
     enable_raw_mode()?;
-    execute!(stdout(), EnterAlternateScreen)?;
+    execute!(stdout(), EnterAlternateScreen, Hide)?;
+    let _guard = TerminalGuard;
 
     let mut view_mode = ViewMode::Grid;
 
     let backend = CrosstermBackend::new(stdout());
     let mut terminal = Terminal::new(backend)?;
-
-    let cli = Cli::parse();
 
     // Track the log directory for summary generation
     let mut summary_tx: Option<tokio::sync::mpsc::Sender<summary::SummaryCommand>> = None;
@@ -137,9 +162,9 @@ async fn main() -> Result<()> {
                                 std::thread::sleep(std::time::Duration::from_millis(100));
                             }
                             
-                            // Cleanup and exit
+                            // Cleanup and exit (process::exit terminates immediately, so guard won't drop)
                             let _ = disable_raw_mode();
-                            let _ = execute!(stdout(), LeaveAlternateScreen);
+                            let _ = execute!(stdout(), LeaveAlternateScreen, Show);
                             process::exit(0);
                         }
                         Action::ChangeView(new_view) => {
@@ -158,5 +183,4 @@ async fn main() -> Result<()> {
 
     // Unreachable - 'q' uses process::exit(0) which terminates immediately
     // Terminal cleanup happens automatically on process exit
-    Ok(())
 }
