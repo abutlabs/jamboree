@@ -2,6 +2,7 @@ mod app;
 mod cli;
 mod event;
 mod node;
+mod summary;
 mod ui;
 
 use crate::app::AppState;
@@ -60,6 +61,9 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
+    // Track the log directory for summary generation
+    let mut summary_tx: Option<tokio::sync::mpsc::Sender<summary::SummaryCommand>> = None;
+
     let (nodes, mut app) = if let Some(log_folder) = &cli.log_folder {
         // Log viewer mode: load from log files
         let log_dir = PathBuf::from(log_folder);
@@ -95,6 +99,9 @@ async fn main() -> Result<()> {
             })
             .collect::<Result<Vec<Node>>>()?;
 
+        // Start the summary generation background task
+        summary_tx = Some(summary::start_summary_task(log_dir));
+
         let app = AppState::new(nodes.len(), cli.search);
         (nodes, app)
     };
@@ -114,8 +121,22 @@ async fn main() -> Result<()> {
         if poll(Duration::from_millis(50))? {
             match read()? {
                 Event::Key(k) => {
+                    // Check for 'x' key to trigger summary generation on shutdown
+                    if k.code == crossterm::event::KeyCode::Char('x') && !app.log_viewer_mode {
+                        if let Some(ref tx) = summary_tx {
+                            let _ = tx.try_send(summary::SummaryCommand::Generate);
+                        }
+                    }
+                    
                     match handle_key_event(k.code, &mut app, &mut focused, &nodes) {
                         Action::Quit => {
+                            // Generate final summary before exiting
+                            if let Some(ref tx) = summary_tx {
+                                let _ = tx.try_send(summary::SummaryCommand::Stop);
+                                // Give a moment for the summary to be written
+                                std::thread::sleep(std::time::Duration::from_millis(100));
+                            }
+                            
                             // Cleanup and exit
                             let _ = disable_raw_mode();
                             let _ = execute!(stdout(), LeaveAlternateScreen);
