@@ -21,7 +21,7 @@ pub struct Node {
 }
 
 impl Node {
-    pub fn spawn(id: usize, log_dir: &PathBuf) -> Result<Self> {
+    pub fn spawn(id: usize, log_dir: &PathBuf, skip_to: Option<String>) -> Result<Self> {
         let pty_system = NativePtySystem::default();
 
         let pair = pty_system.openpty(PtySize {
@@ -38,6 +38,13 @@ impl Node {
 
         let mut cmd = CommandBuilder::new(jamixir_root.join("node.sh"));
         cmd.arg(id.to_string());
+        
+        // Pass through skip announcement flag if provided
+        if let Some(node_ids) = skip_to {
+            cmd.arg("-x");
+            cmd.arg(node_ids);
+        }
+        
         cmd.cwd(&jamixir_root);
 
         let buffer = Arc::new(Mutex::new(String::new()));

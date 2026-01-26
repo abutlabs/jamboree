@@ -21,6 +21,28 @@ use std::{io::stdout, path::PathBuf, process, time::Duration};
 use crate::event::{Action, handle_key_event, handle_mouse_event};
 use crate::ui::focused;
 use ui::grid;
+use std::collections::HashMap;
+
+fn parse_skip_announcements(skip_str: &Option<String>) -> HashMap<usize, String> {
+    let mut map = HashMap::new();
+    
+    if let Some(s) = skip_str {
+        // Parse format: "0:4" or "0:4,1:5" (node_id:skip_node_ids)
+        for part in s.split(',') {
+            let part = part.trim();
+            if let Some(colon_pos) = part.find(':') {
+                let node_id_str = &part[..colon_pos];
+                let skip_ids = &part[colon_pos + 1..];
+                
+                if let Ok(node_id) = node_id_str.parse::<usize>() {
+                    map.insert(node_id, skip_ids.to_string());
+                }
+            }
+        }
+    }
+    
+    map
+}
 
 pub enum ViewMode {
     Grid,
@@ -63,8 +85,14 @@ async fn main() -> Result<()> {
         let log_dir = PathBuf::from("logs").join(datetime);
         std::fs::create_dir_all(&log_dir)?;
 
+        // Parse skip_announcements_to format: "0:4" or "0:4,1:5" (node_id:skip_node_id)
+        let skip_map = parse_skip_announcements(&cli.skip_announcements_to);
+        
         let nodes = (0..6)
-            .map(|id| Node::spawn(id, &log_dir))
+            .map(|id| {
+                let skip_to = skip_map.get(&id).cloned();
+                Node::spawn(id, &log_dir, skip_to)
+            })
             .collect::<Result<Vec<Node>>>()?;
 
         let app = AppState::new(nodes.len(), cli.search);
