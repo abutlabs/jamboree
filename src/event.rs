@@ -51,6 +51,9 @@ pub fn handle_key_event(
                     .join(", ");
             }
         }
+        KeyCode::Char('g') => {
+            app.toggle_grep_mode();
+        }
         KeyCode::Char(' ') if !app.log_viewer_mode => {
             app.toggle_pause(nodes);
         }

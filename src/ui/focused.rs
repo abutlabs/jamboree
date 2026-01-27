@@ -56,7 +56,10 @@ pub fn render(f: &mut Frame, node: &Node, app: &AppState) {
     let visible_lines = area.height.saturating_sub(2) as usize; // borders
     let available_width = area.width.saturating_sub(2).max(1) as usize;
 
-    let text = node.get_text_tail(50_000);
+    let raw_text = node.get_text_tail(5_000_000);
+
+    // Apply grep filter if enabled
+    let text = app.filter_text(&raw_text);
 
     // Calculate wrapped lines for focused view (has wrapping enabled)
     // Only one node in focused view, so we can afford this calculation
