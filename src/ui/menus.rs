@@ -3,17 +3,18 @@ use crate::AppState;
 // Menu constants
 const SEARCH_MENU: &str = " Search: {}_  [Enter] Apply  [Esc] Cancel ";
 
-const GRID_MENU_LOG_VIEWER: &str = " [0-5] Toggle Node Visibility  [Tab] Focus  [/] Search  [↑↓ PgUp PgDn] Scroll  [Enter] Zoom  [Q] Quit";
-const GRID_MENU_NORMAL: &str = " [0-5] Toggle Node Visibility  [Tab] Focus  [/] Search  [Space] Pause All  [Enter] Zoom  [X] Shutdown All  [Q] Quit";
+const GRID_MENU_LOG_VIEWER: &str = " [0-5] Toggle Node Visibility  [Tab] Focus  [/] Search  [g] Grep  [↑↓ PgUp PgDn] Scroll  [Enter] Zoom  [Q] Quit";
+const GRID_MENU_NORMAL: &str = " [0-5] Toggle Node Visibility  [Tab] Focus  [/] Search  [g] Grep  [Space] Pause All  [Enter] Zoom  [X] Shutdown All  [Q] Quit";
 
-const FOCUSED_MENU_LOG_VIEWER: &str = " [Esc] Grid  [/] Search  [↑↓ PgUp PgDn] Scroll  [Q] Quit";
+const FOCUSED_MENU_LOG_VIEWER: &str = " [Esc] Grid  [/] Search  [g] Grep  [↑↓ PgUp PgDn] Scroll  [Q] Quit";
 const FOCUSED_MENU_NORMAL: &str =
-    " [Esc] Grid  [/] Search  [Space] Pause  [↑↓ PgUp PgDn] Scroll  [X] Shutdown All  [Q] Quit";
+    " [Esc] Grid  [/] Search  [g] Grep  [Space] Pause  [↑↓ PgUp PgDn] Scroll  [X] Shutdown All  [Q] Quit";
 
 const TAG_HINT_GRID: &str = "  [←→ Tag Nav] [Del/BS Remove Tag]";
 const TAG_HINT_FOCUSED: &str = "  [←→ Tag Nav] [Del/BS Remove]";
 const PAUSED_INDICATOR: &str = "  [PAUSED]";
 const PAUSED_INDICATOR_FOCUSED: &str = " [PAUSED]";
+const GREP_INDICATOR: &str = "  [GREP]";
 
 pub fn grid_menu(app: &AppState, has_tags: bool) -> String {
     match app.search_mode {
@@ -29,12 +30,14 @@ pub fn grid_menu(app: &AppState, has_tags: bool) -> String {
                 _ => "",
             };
 
+            let grep_status = if app.grep_mode { GREP_INDICATOR } else { "" };
+
             let tag_hint = match has_tags {
                 true => TAG_HINT_GRID,
                 false => "",
             };
 
-            format!("{}{}{}", base_menu, status, tag_hint)
+            format!("{}{}{}{}", base_menu, status, grep_status, tag_hint)
         }
     }
 }
@@ -53,6 +56,8 @@ pub fn focused_menu(app: &AppState, has_tags: bool) -> String {
                 _ => "",
             };
 
+            let grep_status = if app.grep_mode { GREP_INDICATOR } else { "" };
+
             let search_indicator = match &app.highlight {
                 Some(terms) if !terms.is_empty() => {
                     let term_strings: Vec<&str> =
@@ -67,7 +72,7 @@ pub fn focused_menu(app: &AppState, has_tags: bool) -> String {
                 false => "",
             };
 
-            format!("{} {}{}{}", base_menu, status, search_indicator, tag_hint)
+            format!("{} {}{}{}{}", base_menu, status, grep_status, search_indicator, tag_hint)
         }
     }
 }

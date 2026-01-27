@@ -14,6 +14,7 @@ pub struct AppState {
     pub search_input: String,
     pub highlight: Option<Vec<(String, usize)>>, // Multiple search terms with color index (max 6)
     pub selected_tag: Option<usize>, // Currently selected tag index for keyboard navigation
+    pub grep_mode: bool, // true to filter lines (grep), false to only highlight
 }
 
 impl AppState {
@@ -103,6 +104,7 @@ impl AppState {
             highlight,
             hidden: vec![false; node_count],
             selected_tag,
+            grep_mode: false,
         }
     }
 
@@ -124,6 +126,7 @@ impl AppState {
             highlight,
             hidden: vec![false; node_count],
             selected_tag,
+            grep_mode: false,
         }
     }
 
@@ -239,5 +242,34 @@ impl AppState {
         if !self.paused {
             self.toggle_pause(nodes);
         }
+    }
+
+    /// Toggle grep mode (filter lines vs highlight only)
+    pub fn toggle_grep_mode(&mut self) {
+        self.grep_mode = !self.grep_mode;
+    }
+
+    /// Filter text to only include lines matching any of the search terms (grep behavior)
+    pub fn filter_text(&self, text: &str) -> String {
+        if !self.grep_mode {
+            return text.to_string();
+        }
+
+        let Some(ref terms) = self.highlight else {
+            return text.to_string();
+        };
+
+        if terms.is_empty() {
+            return text.to_string();
+        }
+
+        text.lines()
+            .filter(|line| {
+                terms.iter().any(|(term, _)| {
+                    !term.is_empty() && line.contains(term.as_str())
+                })
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }
