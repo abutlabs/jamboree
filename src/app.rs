@@ -15,6 +15,8 @@ pub struct AppState {
     pub highlight: Option<Vec<(String, usize)>>, // Multiple search terms with color index (max 6)
     pub selected_tag: Option<usize>, // Currently selected tag index for keyboard navigation
     pub grep_mode: bool, // true to filter lines (grep), false to only highlight
+    pub show_help: bool, // true to display help overlay
+    pub last_key: Option<char>, // Track last key for vi commands like 'gg'
 }
 
 impl AppState {
@@ -105,6 +107,8 @@ impl AppState {
             hidden: vec![false; node_count],
             selected_tag,
             grep_mode: false,
+            show_help: false,
+            last_key: None,
         }
     }
 
@@ -127,6 +131,8 @@ impl AppState {
             hidden: vec![false; node_count],
             selected_tag,
             grep_mode: false,
+            show_help: false,
+            last_key: None,
         }
     }
 
@@ -247,6 +253,92 @@ impl AppState {
     /// Toggle grep mode (filter lines vs highlight only)
     pub fn toggle_grep_mode(&mut self) {
         self.grep_mode = !self.grep_mode;
+    }
+
+    /// Toggle help overlay
+    pub fn toggle_help(&mut self) {
+        self.show_help = !self.show_help;
+    }
+
+    /// Scroll to the beginning of the file (vi 'gg')
+    pub fn scroll_to_top(&mut self, idx: usize) {
+        let mut scroll = self.frozen_scroll.borrow_mut();
+        scroll[idx] = 0;
+    }
+
+    /// Scroll to the end of the file (vi 'G')
+    pub fn scroll_to_bottom(&mut self, idx: usize) {
+        let mut scroll = self.frozen_scroll.borrow_mut();
+        scroll[idx] = 10000; // Will be clamped by the renderer
+    }
+
+    /// Scroll by half page (vi Ctrl+d / Ctrl+u)
+    pub fn scroll_half_page(&mut self, idx: usize, down: bool) {
+        let delta = if down { 15 } else { -15 };
+        self.scroll_delta(idx, delta);
+    }
+
+    /// Scroll by full page (vi Ctrl+f / Ctrl+b)
+    pub fn scroll_full_page(&mut self, idx: usize, down: bool) {
+        let delta = if down { 30 } else { -30 };
+        self.scroll_delta(idx, delta);
+    }
+
+    /// Find line numbers that contain any search term
+    fn find_matching_lines(&self, text: &str) -> Vec<usize> {
+        let Some(ref terms) = self.highlight else {
+            return Vec::new();
+        };
+
+        if terms.is_empty() {
+            return Vec::new();
+        }
+
+        text.lines()
+            .enumerate()
+            .filter(|(_, line)| {
+                terms.iter().any(|(term, _)| {
+                    !term.is_empty() && line.contains(term.as_str())
+                })
+            })
+            .map(|(idx, _)| idx)
+            .collect()
+    }
+
+    /// Jump to next search match (vi 'n')
+    pub fn jump_to_next_match(&mut self, idx: usize, text: &str) {
+        let matches = self.find_matching_lines(text);
+        if matches.is_empty() {
+            return;
+        }
+
+        let current_scroll = self.frozen_scroll.borrow()[idx] as usize;
+        
+        // Find first match after current scroll position
+        if let Some(&next_line) = matches.iter().find(|&&line| line > current_scroll) {
+            self.frozen_scroll.borrow_mut()[idx] = next_line as u16;
+        } else {
+            // Wrap around to first match
+            self.frozen_scroll.borrow_mut()[idx] = matches[0] as u16;
+        }
+    }
+
+    /// Jump to previous search match (vi 'N')
+    pub fn jump_to_prev_match(&mut self, idx: usize, text: &str) {
+        let matches = self.find_matching_lines(text);
+        if matches.is_empty() {
+            return;
+        }
+
+        let current_scroll = self.frozen_scroll.borrow()[idx] as usize;
+        
+        // Find last match before current scroll position
+        if let Some(&prev_line) = matches.iter().rev().find(|&&line| line < current_scroll) {
+            self.frozen_scroll.borrow_mut()[idx] = prev_line as u16;
+        } else {
+            // Wrap around to last match
+            self.frozen_scroll.borrow_mut()[idx] = *matches.last().unwrap() as u16;
+        }
     }
 
     /// Filter text to only include lines matching any of the search terms (grep behavior)

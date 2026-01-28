@@ -77,12 +77,19 @@ pub fn render(f: &mut Frame, node: &Node, app: &AppState) {
 
     let paused = *node.paused.lock().unwrap();
 
+    let max_scroll = total_wrapped_lines.saturating_sub(visible_lines).min(10000) as u16;
+
     let scroll_y = if app.paused || app.log_viewer_mode {
-        app.frozen_scroll.borrow()[node.id]
+        // Clamp stored scroll to actual max and update stored value
+        let stored = app.frozen_scroll.borrow()[node.id];
+        let clamped = stored.min(max_scroll);
+        if clamped != stored {
+            app.frozen_scroll.borrow_mut()[node.id] = clamped;
+        }
+        clamped
     } else {
-        let s = total_wrapped_lines.saturating_sub(visible_lines).min(10000) as u16;
-        app.frozen_scroll.borrow_mut()[node.id] = s;
-        s
+        app.frozen_scroll.borrow_mut()[node.id] = max_scroll;
+        max_scroll
     };
     let highlighted_text = highlight_text(&text, app.highlight.as_ref().map(|v| v.as_slice()));
     let widget = Paragraph::new(highlighted_text)
