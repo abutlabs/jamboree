@@ -23,6 +23,7 @@ use std::{io::stdout, path::PathBuf, process, time::Duration};
 
 use crate::event::{Action, handle_key_event, handle_mouse_event};
 use crate::ui::focused;
+use crate::ui::help;
 use ui::grid;
 use std::collections::HashMap;
 
@@ -134,12 +135,18 @@ async fn run_app(cli: Cli) -> Result<()> {
     let mut focused = 0usize;
 
     loop {
-        terminal.draw(|f| match view_mode {
-            ViewMode::Grid => {
-                grid::render(f, &nodes, focused, &app);
+        terminal.draw(|f| {
+            match view_mode {
+                ViewMode::Grid => {
+                    grid::render(f, &nodes, focused, &app);
+                }
+                ViewMode::Focused(i) => {
+                    focused::render(f, &nodes[i], &app);
+                }
             }
-            ViewMode::Focused(i) => {
-                focused::render(f, &nodes[i], &app);
+            // Render help overlay on top if active
+            if app.show_help {
+                help::render(f);
             }
         })?;
 
@@ -153,7 +160,7 @@ async fn run_app(cli: Cli) -> Result<()> {
                         }
                     }
                     
-                    match handle_key_event(k.code, &mut app, &mut focused, &nodes) {
+                    match handle_key_event(k.code, k.modifiers, &mut app, &mut focused, &nodes) {
                         Action::Quit => {
                             // Generate final summary before exiting
                             if let Some(ref tx) = summary_tx {

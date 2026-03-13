@@ -101,13 +101,19 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState) {
 
             // ---- SCROLL LOGIC (EXACT, NO WRAP) ----
             let line_count = text.bytes().filter(|&b| b == b'\n').count();
+            let max_scroll = line_count.saturating_sub(visible_lines).min(10_000) as u16;
 
             let scroll_y = if app.paused || app.log_viewer_mode {
-                app.frozen_scroll.borrow()[node_idx]
+                // Clamp stored scroll to actual max and update stored value
+                let stored = app.frozen_scroll.borrow()[node_idx];
+                let clamped = stored.min(max_scroll);
+                if clamped != stored {
+                    app.frozen_scroll.borrow_mut()[node_idx] = clamped;
+                }
+                clamped
             } else {
-                let s = line_count.saturating_sub(visible_lines).min(10_000) as u16;
-                app.frozen_scroll.borrow_mut()[node_idx] = s;
-                s
+                app.frozen_scroll.borrow_mut()[node_idx] = max_scroll;
+                max_scroll
             };
 
             // ---- HIGHLIGHT ----

@@ -3,18 +3,17 @@ use crate::AppState;
 // Menu constants
 const SEARCH_MENU: &str = " Search: {}_  [Enter] Apply  [Esc] Cancel ";
 
-const GRID_MENU_LOG_VIEWER: &str = " [0-5] Toggle Node Visibility  [Tab] Focus  [/] Search  [g] Grep  [↑↓ PgUp PgDn] Scroll  [Enter] Zoom  [Q] Quit";
-const GRID_MENU_NORMAL: &str = " [0-5] Toggle Node Visibility  [Tab] Focus  [/] Search  [g] Grep  [Space] Pause All  [Enter] Zoom  [X] Shutdown All  [Q] Quit";
+const GRID_MENU_LOG_VIEWER: &str = " [0-5] Node  [Tab] Focus  [/] Search  [Enter] Zoom  [?] Help  [q] Quit";
+const GRID_MENU_NORMAL: &str = " [0-5] Node  [Tab] Focus  [/] Search  [Space] Pause  [Enter] Zoom  [?] Help  [q] Quit";
 
-const FOCUSED_MENU_LOG_VIEWER: &str = " [Esc] Grid  [/] Search  [g] Grep  [↑↓ PgUp PgDn] Scroll  [Q] Quit";
-const FOCUSED_MENU_NORMAL: &str =
-    " [Esc] Grid  [/] Search  [g] Grep  [Space] Pause  [↑↓ PgUp PgDn] Scroll  [X] Shutdown All  [Q] Quit";
+const FOCUSED_MENU_LOG_VIEWER: &str = " [Esc] Grid  [/] Search  [?] Help  [q] Quit";
+const FOCUSED_MENU_NORMAL: &str = " [Esc] Grid  [/] Search  [Space] Pause  [?] Help  [q] Quit";
 
-const TAG_HINT_GRID: &str = "  [←→ Tag Nav] [Del/BS Remove Tag]";
-const TAG_HINT_FOCUSED: &str = "  [←→ Tag Nav] [Del/BS Remove]";
+const TAG_HINT_GRID: &str = "  [←→ Tag] [Del Remove]";
+const TAG_HINT_FOCUSED: &str = "  [←→ Tag] [Del Remove]";
 const PAUSED_INDICATOR: &str = "  [PAUSED]";
 const PAUSED_INDICATOR_FOCUSED: &str = " [PAUSED]";
-const GREP_INDICATOR: &str = "  [GREP]";
+const GREP_INDICATOR: &str = " [GREP]";
 
 pub fn grid_menu(app: &AppState, has_tags: bool) -> String {
     match app.search_mode {
