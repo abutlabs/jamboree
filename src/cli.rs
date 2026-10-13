@@ -1,4 +1,5 @@
 use clap::Parser;
+use regex::Regex;
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
@@ -24,7 +25,20 @@ pub struct Cli {
     #[arg(long)]
     pub jamixir: Option<PathBuf>,
 
+    /// Block-authored line pattern for summary.log, capture group 1 = block hash
+    /// (default: Jamixir's line; with --cmd and no pattern, no summary is written)
+    #[arg(long, value_parser = parse_summary_regex)]
+    pub summary_regex: Option<Regex>,
+
     /// Skip config: NODE_ID:SKIP_IDS (Jamixir only)
     #[arg(short = 'x', long = "skip-announcements-to", conflicts_with = "cmd")]
     pub skip_announcements_to: Option<String>,
+}
+
+fn parse_summary_regex(s: &str) -> Result<Regex, String> {
+    let re = Regex::new(s).map_err(|e| e.to_string())?;
+    if re.captures_len() < 2 {
+        return Err("needs a capture group for the block hash".into());
+    }
+    Ok(re)
 }

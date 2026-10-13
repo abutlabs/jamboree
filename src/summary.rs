@@ -1,3 +1,4 @@
+use regex::Regex;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -11,8 +12,13 @@ struct BlockEntry {
     block_hash: String,
 }
 
+/// Jamixir's block-authored line, capture group 1 = header hash
+pub fn jamixir_block_regex() -> Regex {
+    Regex::new(r"\[BLOCK\] ⛓️ Block created successfully\. Header Hash (.+)").unwrap()
+}
+
 /// Scans all node log files and extracts block creation events
-fn scan_logs_for_blocks(log_dir: &PathBuf, node_count: usize) -> Vec<BlockEntry> {
+fn scan_logs_for_blocks(log_dir: &PathBuf, node_count: usize, block_regex: &Regex) -> Vec<BlockEntry> {
     let mut entries = Vec::new();
 
     for id in 0..node_count {
@@ -23,23 +29,18 @@ fn scan_logs_for_blocks(log_dir: &PathBuf, node_count: usize) -> Vec<BlockEntry>
 
         if let Ok(content) = std::fs::read_to_string(&log_path) {
             for line in content.lines() {
-                // Look for: "[BLOCK] ⛓️ Block created successfully. Header Hash 0x..."
-                if let Some(hash_start) = line.find("[BLOCK] ⛓️ Block created successfully. Header Hash ") {
+                // e.g. "[BLOCK] ⛓️ Block created successfully. Header Hash 0x..."
+                if let Some(hash) = block_regex.captures(line).and_then(|c| c.get(1)) {
                     // Extract timestamp from beginning of line (format: "2026-01-26 11:01:30.018")
-                    let timestamp = if line.len() >= 23 && line.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
-                        line[..23].to_string()
-                    } else {
-                        "unknown".to_string()
+                    let timestamp = match line.get(..23) {
+                        Some(ts) if ts.starts_with(|c: char| c.is_ascii_digit()) => ts.to_string(),
+                        _ => "unknown".to_string(),
                     };
-
-                    // Extract block hash
-                    let hash_offset = hash_start + "[BLOCK] ⛓️ Block created successfully. Header Hash ".len();
-                    let block_hash = line[hash_offset..].trim().to_string();
 
                     entries.push(BlockEntry {
                         timestamp,
                         node_id: id,
-                        block_hash,
+                        block_hash: hash.as_str().trim().to_string(),
                     });
                 }
             }
@@ -91,8 +92,8 @@ fn write_summary(log_dir: &PathBuf, node_count: usize, entries: &[BlockEntry]) -
 }
 
 /// Generates the summary once (called on demand)
-pub fn generate_summary(log_dir: &PathBuf, node_count: usize) {
-    let entries = scan_logs_for_blocks(log_dir, node_count);
+pub fn generate_summary(log_dir: &PathBuf, node_count: usize, block_regex: &Regex) {
+    let entries = scan_logs_for_blocks(log_dir, node_count, block_regex);
     if let Err(e) = write_summary(log_dir, node_count, &entries) {
         eprintln!("Failed to write summary: {}", e);
     }
@@ -108,7 +109,7 @@ pub enum SummaryCommand {
 
 /// Starts the background summary generation task
 /// Returns a sender that can be used to trigger summary generation or stop the task
-pub fn start_summary_task(log_dir: PathBuf, node_count: usize) -> mpsc::Sender<SummaryCommand> {
+pub fn start_summary_task(log_dir: PathBuf, node_count: usize, block_regex: Regex) -> mpsc::Sender<SummaryCommand> {
     let (tx, mut rx) = mpsc::channel::<SummaryCommand>(10);
 
     let log_dir = Arc::new(log_dir);
@@ -120,18 +121,18 @@ pub fn start_summary_task(log_dir: PathBuf, node_count: usize) -> mpsc::Sender<S
             tokio::select! {
                 // Periodic tick every 30 seconds
                 _ = ticker.tick() => {
-                    generate_summary(&log_dir, node_count);
+                    generate_summary(&log_dir, node_count, &block_regex);
                 }
                 
                 // Handle commands
                 cmd = rx.recv() => {
                     match cmd {
                         Some(SummaryCommand::Generate) => {
-                            generate_summary(&log_dir, node_count);
+                            generate_summary(&log_dir, node_count, &block_regex);
                         }
                         Some(SummaryCommand::Stop) | None => {
                             // Final generation before stopping
-                            generate_summary(&log_dir, node_count);
+                            generate_summary(&log_dir, node_count, &block_regex);
                             break;
                         }
                     }
@@ -141,4 +142,40 @@ pub fn start_summary_task(log_dir: PathBuf, node_count: usize) -> mpsc::Sender<S
     });
 
     tx
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn scan(lines: &str, block_regex: &Regex) -> Vec<BlockEntry> {
+        let dir = std::env::temp_dir().join(format!("jam-ui-summary-{}-{}", std::process::id(), lines.len()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("node_1.log"), lines).unwrap();
+        let entries = scan_logs_for_blocks(&dir, 2, block_regex);
+        std::fs::remove_dir_all(&dir).unwrap();
+        entries
+    }
+
+    #[test]
+    fn jamixir_pattern_reads_timestamp_and_hash() {
+        let entries = scan(
+            "2026-01-26 11:01:30.018 [BLOCK] ⛓️ Block created successfully. Header Hash 0xabc \n\
+             2026-01-26 11:01:31.000 [info] imported\n",
+            &jamixir_block_regex(),
+        );
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].timestamp, "2026-01-26 11:01:30.018");
+        assert_eq!(entries[0].node_id, 1);
+        assert_eq!(entries[0].block_hash, "0xabc");
+    }
+
+    #[test]
+    fn custom_pattern_uses_first_capture_group() {
+        let re = Regex::new(r"authored block hash=(0x[0-9a-f]+)").unwrap();
+        let entries = scan("INFO authored block hash=0xdef slot=4\n", &re);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].timestamp, "unknown");
+        assert_eq!(entries[0].block_hash, "0xdef");
+    }
 }

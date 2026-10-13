@@ -181,8 +181,15 @@ async fn run_app(cli: Cli, commands: Option<Vec<CommandBuilder>>) -> Result<()> 
             .map(|(id, cmd)| Node::spawn(id, &log_dir, cmd))
             .collect::<Result<Vec<Node>>>()?;
 
-        // Start the summary generation background task
-        summary_tx = Some(summary::start_summary_task(log_dir, nodes.len()));
+        // Start the summary generation background task (Jamixir's line unless --cmd without a pattern)
+        let summary_regex = match (&cli.summary_regex, &cli.cmd) {
+            (Some(re), _) => Some(re.clone()),
+            (None, None) => Some(summary::jamixir_block_regex()),
+            (None, Some(_)) => None,
+        };
+        if let Some(re) = summary_regex {
+            summary_tx = Some(summary::start_summary_task(log_dir, nodes.len(), re));
+        }
 
         let app = AppState::new(nodes.len(), cli.search);
         (nodes, app)
