@@ -9,7 +9,7 @@ mod utils;
 use crate::app::AppState;
 use crate::cli::Cli;
 use crate::node::Node;
-use anyhow::Result;
+use anyhow::{Context, Result, anyhow};
 use chrono::Local;
 use clap::Parser;
 use crossterm::{
@@ -18,6 +18,7 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
+use portable_pty::CommandBuilder;
 use ratatui::prelude::*;
 use std::{io::stdout, path::PathBuf, process, time::Duration};
 
@@ -48,6 +49,56 @@ fn parse_skip_announcements(skip_str: &Option<String>) -> HashMap<usize, String>
     map
 }
 
+/// One command per node: `--cmd` through `sh -c`, otherwise Jamixir's node.sh
+fn node_commands(cli: &Cli) -> Result<Vec<CommandBuilder>> {
+    anyhow::ensure!(cli.nodes > 0, "--nodes must be at least 1");
+    if let Some(cmd) = &cli.cmd {
+        let cwd = std::env::current_dir()?;
+        return Ok((0..cli.nodes)
+            .map(|id| {
+                let mut c = CommandBuilder::new("sh");
+                c.args(["-c", &utils::node_command(cmd, id)]);
+                c.cwd(&cwd);
+                c
+            })
+            .collect());
+    }
+
+    let root = match &cli.jamixir {
+        Some(path) => path.clone(),
+        None => utils::find_jamixir_root().ok_or_else(|| {
+            anyhow!(
+                "no jamixir/node.sh found next to the current directory or the jam-ui binary\n\
+                 use --jamixir <path> for a Jamixir checkout, or --cmd '<command with {{i}}>' for any other client"
+            )
+        })?,
+    };
+    let root = std::fs::canonicalize(&root)
+        .ok()
+        .filter(|r| r.join("node.sh").is_file())
+        .with_context(|| format!("no node.sh in {}", root.display()))?;
+
+    // Clean up any leftover build lock from incomplete previous builds
+    utils::cleanup_build_lock(&root);
+
+    // Parse skip_announcements_to format: "0:4" or "0:4,1:5" (node_id:skip_node_id)
+    let skip_map = parse_skip_announcements(&cli.skip_announcements_to);
+
+    Ok((0..cli.nodes)
+        .map(|id| {
+            let mut c = CommandBuilder::new(root.join("node.sh"));
+            c.arg(id.to_string());
+            // Pass through skip announcement flag if provided
+            if let Some(node_ids) = skip_map.get(&id) {
+                c.arg("-x");
+                c.arg(node_ids);
+            }
+            c.cwd(&root);
+            c
+        })
+        .collect())
+}
+
 pub enum ViewMode {
     Grid,
     Focused(usize),
@@ -67,17 +118,26 @@ async fn main() -> Result<()> {
     // Parse CLI first, before terminal setup (so --help works properly)
     let cli = Cli::parse();
 
-    // Clean up any leftover build lock from incomplete previous builds
-    utils::cleanup_build_lock();
+    // Resolve the node commands before terminal setup (so errors print normally)
+    let commands = match &cli.log_folder {
+        Some(_) => None,
+        None => match node_commands(&cli) {
+            Ok(commands) => Some(commands),
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        },
+    };
 
-    if let Err(e) = run_app(cli).await {
+    if let Err(e) = run_app(cli, commands).await {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     }
     Ok(())
 }
 
-async fn run_app(cli: Cli) -> Result<()> {
+async fn run_app(cli: Cli, commands: Option<Vec<CommandBuilder>>) -> Result<()> {
     enable_raw_mode()?;
     execute!(stdout(), EnterAlternateScreen, Hide)?;
     let _guard = TerminalGuard;
@@ -115,18 +175,15 @@ async fn run_app(cli: Cli) -> Result<()> {
         let log_dir = PathBuf::from("logs").join(datetime);
         std::fs::create_dir_all(&log_dir)?;
 
-        // Parse skip_announcements_to format: "0:4" or "0:4,1:5" (node_id:skip_node_id)
-        let skip_map = parse_skip_announcements(&cli.skip_announcements_to);
-        
-        let nodes = (0..6)
-            .map(|id| {
-                let skip_to = skip_map.get(&id).cloned();
-                Node::spawn(id, &log_dir, skip_to)
-            })
+        let nodes = commands
+            .unwrap_or_default()
+            .into_iter()
+            .enumerate()
+            .map(|(id, cmd)| Node::spawn(id, &log_dir, cmd))
             .collect::<Result<Vec<Node>>>()?;
 
         // Start the summary generation background task
-        summary_tx = Some(summary::start_summary_task(log_dir));
+        summary_tx = Some(summary::start_summary_task(log_dir, nodes.len()));
 
         let app = AppState::new(nodes.len(), cli.search);
         (nodes, app)

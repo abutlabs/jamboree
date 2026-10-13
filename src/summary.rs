@@ -12,10 +12,10 @@ struct BlockEntry {
 }
 
 /// Scans all node log files and extracts block creation events
-fn scan_logs_for_blocks(log_dir: &PathBuf) -> Vec<BlockEntry> {
+fn scan_logs_for_blocks(log_dir: &PathBuf, node_count: usize) -> Vec<BlockEntry> {
     let mut entries = Vec::new();
 
-    for id in 0..6 {
+    for id in 0..node_count {
         let log_path = log_dir.join(format!("node_{}.log", id));
         if !log_path.exists() {
             continue;
@@ -52,7 +52,7 @@ fn scan_logs_for_blocks(log_dir: &PathBuf) -> Vec<BlockEntry> {
 }
 
 /// Writes the summary log file
-fn write_summary(log_dir: &PathBuf, entries: &[BlockEntry]) -> std::io::Result<()> {
+fn write_summary(log_dir: &PathBuf, node_count: usize, entries: &[BlockEntry]) -> std::io::Result<()> {
     use std::io::Write;
 
     let summary_path = log_dir.join("summary.log");
@@ -80,7 +80,7 @@ fn write_summary(log_dir: &PathBuf, entries: &[BlockEntry]) -> std::io::Result<(
     // Add per-node summary
     writeln!(file)?;
     writeln!(file, "BLOCKS PER NODE:")?;
-    for id in 0..6 {
+    for id in 0..node_count {
         let count = entries.iter().filter(|e| e.node_id == id).count();
         if count > 0 {
             writeln!(file, "  Node {}: {} blocks", id, count)?;
@@ -91,9 +91,9 @@ fn write_summary(log_dir: &PathBuf, entries: &[BlockEntry]) -> std::io::Result<(
 }
 
 /// Generates the summary once (called on demand)
-pub fn generate_summary(log_dir: &PathBuf) {
-    let entries = scan_logs_for_blocks(log_dir);
-    if let Err(e) = write_summary(log_dir, &entries) {
+pub fn generate_summary(log_dir: &PathBuf, node_count: usize) {
+    let entries = scan_logs_for_blocks(log_dir, node_count);
+    if let Err(e) = write_summary(log_dir, node_count, &entries) {
         eprintln!("Failed to write summary: {}", e);
     }
 }
@@ -108,7 +108,7 @@ pub enum SummaryCommand {
 
 /// Starts the background summary generation task
 /// Returns a sender that can be used to trigger summary generation or stop the task
-pub fn start_summary_task(log_dir: PathBuf) -> mpsc::Sender<SummaryCommand> {
+pub fn start_summary_task(log_dir: PathBuf, node_count: usize) -> mpsc::Sender<SummaryCommand> {
     let (tx, mut rx) = mpsc::channel::<SummaryCommand>(10);
 
     let log_dir = Arc::new(log_dir);
@@ -120,18 +120,18 @@ pub fn start_summary_task(log_dir: PathBuf) -> mpsc::Sender<SummaryCommand> {
             tokio::select! {
                 // Periodic tick every 30 seconds
                 _ = ticker.tick() => {
-                    generate_summary(&log_dir);
+                    generate_summary(&log_dir, node_count);
                 }
                 
                 // Handle commands
                 cmd = rx.recv() => {
                     match cmd {
                         Some(SummaryCommand::Generate) => {
-                            generate_summary(&log_dir);
+                            generate_summary(&log_dir, node_count);
                         }
                         Some(SummaryCommand::Stop) | None => {
                             // Final generation before stopping
-                            generate_summary(&log_dir);
+                            generate_summary(&log_dir, node_count);
                             break;
                         }
                     }
