@@ -1,6 +1,12 @@
 # Jam UI
 
-Terminal UI for monitoring multiple node processes.
+Terminal UI for watching the logs of up to six JAM nodes side by side. Built while
+developing [Jamixir](https://jamixir.org), to follow one event (a block being authored
+and imported, say) across a local testnet: freeze every pane at once, scroll each node,
+and highlight the same block hash in all of them.
+
+Normal mode starts the nodes through Jamixir's `node.sh`. Log-viewer mode (`--logs`)
+works on any folder of `node_<id>.log` files.
 
 <img width="2145" height="1179" alt="Image" src="https://github.com/user-attachments/assets/29b5ef57-5c6f-46c3-983e-5f387fe8bdec" />
 
@@ -70,3 +76,6 @@ All node output is automatically logged to timestamped directories:
 - Logs are written in real-time as nodes produce output
 - Use **`--logs`** flag to view previously saved logs
 
+## License
+
+[Apache-2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT), at your option.
