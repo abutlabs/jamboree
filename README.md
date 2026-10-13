@@ -60,77 +60,17 @@ Repeat `--cmd` to run one node per command, in order (`{i}` is still the node in
 panes with the label instead of "Node". A command that itself starts with `NAME=value`
 needs a label or `env` in front, or `NAME` is taken as the label.
 
-PolkaJam v0.1.28 validators 0-3, Typeberry v0.11.0 (from source, in `../typeberry`) as
-validator 4 and SpaceJam 0.1.0 as validator 5, all on PolkaJam's dev chain:
-
 ```bash
-polkajam --chain dev dump-spec spec.json
-BOOT=eecgwpgwq3noky4ijm4jmvjtmuzv44qvigciusxakq5epnrfj2utb@127.0.0.1:40000   # polkajam dev validator 0
-PJ='polkajam=polkajam --chain dev run --temp --dev-validator {i} --rpc-port 1980{i} --pvm-backend interpreter'
-TB="typeberry=cd ../typeberry && npm start -- --config=dev --config='.chain_spec+={\"bootnodes\":[\"$BOOT\"]}' dev {i}"
-SJ="spacejam=spacejam run -v --chain spec.json --validator {i} -d sjdata --prune --address 127.0.0.1:4000{i} --rpc 127.0.0.1:1980{i} --bootnode $BOOT"
-jam-ui --cmd "$PJ" --cmd "$PJ" --cmd "$PJ" --cmd "$PJ" --cmd "$TB" --cmd "$SJ" \
-  --summary-regex 'Authored block (0x[0-9a-f]+)'
+jam-ui --cmd 'client-a=<command for a client-a node {i}>' \
+       --cmd 'client-a=<command for a client-a node {i}>' \
+       --cmd 'client-b=<command for a client-b node {i}>'
 ```
 
-In this setup the PolkaJam nodes author, import and finalize. SpaceJam connects, imports and
-finalizes their blocks but did not author its slot. Typeberry connects to PolkaJam and receives
-its blocks, but rejects them (`Parent ... not found`) and authors on its own chain.
-Clients log authored blocks differently, so one `--summary-regex` may need an alternation,
-e.g. `'(?:Authored block |INFO block#\d+@)(0x[0-9a-f]+)'` for PolkaJam and SpaceJam's dev mode.
+The nodes need a shared chain spec and bootnode to form one network; how to set that
+up depends on each client. Clients log authored blocks differently, so a mixed
+`--summary-regex` may need an alternation, e.g. `'(?:Pattern A |Pattern B )(0x[0-9a-f]+)'`.
 
-### Tested with
-
-**PolkaJam** ([release binary](https://github.com/paritytech/polkajam-releases), nightly 2026-10-13):
-works. A 6-validator dev chain that authors, imports and finalizes blocks.
-
-```bash
-jam-ui --nodes 6 --cmd 'polkajam --chain dev run --temp --dev-validator {i} --rpc-port 1980{i} --pvm-backend interpreter' \
-  --summary-regex 'Authored block (0x[0-9a-f]+)'
-```
-
-`--pvm-backend interpreter` is only needed where `vm.unprivileged_userfaultfd` is off.
-PolkaJam shortens hashes in its log, so the summary shows the first 8 bytes.
-
-**Typeberry** ([source](https://github.com/FluffyLabs/typeberry), v0.11.0): works from a source
-checkout. Six dev nodes connect, author and import blocks, the same setup as its
-`npm run tiny-network`.
-
-```bash
-git clone --branch v0.11.0 https://github.com/FluffyLabs/typeberry && cd typeberry && npm ci
-jam-ui --nodes 6 --cmd 'npm start -- dev {i}'
-```
-
-The published `ghcr.io/fluffylabs/typeberry` image and the `@typeberry/jam` npm package
-(0.10.0, 0.11.0) start, but stop as soon as they author (`Cannot find package 'tsx'`).
-
-**SpaceJam** ([release binary](https://github.com/spacejamapp/spacejam), 0.1.0): authors, as
-independent single-node dev chains. It needs a Gray Paper 0.7.2 chain spec; its built-in
-dev spec fails with `failed to decode recent blocks`. PolkaJam v0.1.28 (GP 0.7.2) writes one:
-
-```bash
-polkajam --chain dev dump-spec spec.json
-jam-ui --nodes 3 --cmd 'spacejam run -v --dev --chain spec.json -d data/{i} --prune --rpc 127.0.0.1:1990{i}'
-```
-
-It can also join a PolkaJam v0.1.28 dev network as validator 5. There it imports and finalizes
-the PolkaJam blocks, but it did not author its own slot in our run:
-
-```bash
-jam-ui --nodes 6 --cmd 'if [ {i} = 5 ]; then spacejam run -v --chain spec.json --validator 5 -d sjdata --prune --address 127.0.0.1:40005 --rpc 127.0.0.1:19805 --bootnode eecgwpgwq3noky4ijm4jmvjtmuzv44qvigciusxakq5epnrfj2utb@127.0.0.1:40000; else polkajam --chain dev run --temp --dev-validator {i} --rpc-port 1980{i} --pvm-backend interpreter; fi'
-```
-
-**JamZig** ([conformance binaries](https://github.com/jamzig/conformance-releases), GP 0.7.2):
-imports only. The release is a conformance target plus a fuzzer, with no network or authoring
-mode. jam-ui can show both side by side:
-
-```bash
-jam-ui --nodes 2 --cmd 'if [ {i} = 0 ]; then jam_conformance_target -v --socket /tmp/jamzig.sock; else sleep 1; jam_conformance_fuzzer --socket /tmp/jamzig.sock --blocks 50; fi'
-```
-
-**Boka** (`acala/boka:latest`): doesn't run.
-`docker run --rm acala/boka:latest --dev --dev-seed 0 --rpc no` logs its genesis and shuts down
-right away.
+Tried with PolkaJam, Typeberry, SpaceJam and Jamixir dev networks.
 
 ### Search and log viewer
 
