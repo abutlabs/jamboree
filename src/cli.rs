@@ -13,11 +13,12 @@ pub struct Cli {
     #[arg(short = 'l', long = "logs")]
     pub log_folder: Option<String>,
 
-    /// Shell command that starts one node, run with `sh -c`; {i} is replaced by the node index
+    /// Shell command that starts a node, run with `sh -c`; {i} is replaced by the node index.
+    /// Repeat it to run one node per command; prefix `<label>=` to name the panes
     #[arg(long)]
-    pub cmd: Option<String>,
+    pub cmd: Vec<String>,
 
-    /// Number of nodes to start (default 6); with --logs, number of files to load (default all)
+    /// Number of nodes to start (default 6, or one per --cmd); with --logs, number of files to load (default all)
     #[arg(long)]
     pub nodes: Option<usize>,
 

@@ -122,7 +122,7 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState) {
             // ---- RENDER ----
             let widget = Paragraph::new(content).scroll((scroll_y, 0)).block(
                 Block::default()
-                    .title(format!("Node {}", node_idx))
+                    .title(format!("{} {}", node.label, node_idx))
                     .borders(Borders::ALL)
                     .border_style(if focused == node_idx {
                         Style::default().fg(Color::Yellow)

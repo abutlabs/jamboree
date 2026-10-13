@@ -16,6 +16,19 @@ pub fn find_log_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
     Ok(files)
 }
 
+/// Split an optional `<label>=` prefix (letters, digits, `_`, `-`) off a node command
+pub fn split_label(cmd: &str) -> (Option<&str>, &str) {
+    match cmd.split_once('=') {
+        Some((label, rest))
+            if !label.is_empty()
+                && label.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') =>
+        {
+            (Some(label), rest)
+        }
+        _ => (None, cmd),
+    }
+}
+
 /// Replace every `{i}` in a node command with the node index
 pub fn node_command(cmd: &str, id: usize) -> String {
     cmd.replace("{i}", &id.to_string())
@@ -32,6 +45,15 @@ mod tests {
             "docker run --name node3 img --port 40003"
         );
         assert_eq!(node_command("./run.sh", 1), "./run.sh");
+    }
+
+    #[test]
+    fn split_label_only_takes_a_plain_prefix() {
+        assert_eq!(split_label("polkajam=polkajam run {i}"), (Some("polkajam"), "polkajam run {i}"));
+        assert_eq!(split_label("node-2_b=./n --x=1"), (Some("node-2_b"), "./n --x=1"));
+        assert_eq!(split_label("./node --port=4000{i}"), (None, "./node --port=4000{i}"));
+        assert_eq!(split_label("cd x && a=1 ./n"), (None, "cd x && a=1 ./n"));
+        assert_eq!(split_label("=./n"), (None, "=./n"));
     }
 
     #[test]

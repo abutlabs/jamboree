@@ -27,16 +27,24 @@ use crate::ui::focused;
 use crate::ui::help;
 use ui::grid;
 
-/// One `sh -c` command per node, with `{i}` replaced by the node index
-fn node_commands(cmd: &str, count: usize) -> Result<Vec<CommandBuilder>> {
+/// One labelled `sh -c` command per node, with `{i}` replaced by the node index:
+/// a single --cmd is the template for every node, several --cmd give one node each
+fn node_commands(cmds: &[String], nodes: Option<usize>) -> Result<Vec<(String, CommandBuilder)>> {
+    let count = match (cmds.len(), nodes) {
+        (1, n) => n.unwrap_or(6),
+        (len, None) => len,
+        (len, Some(n)) if n == len => n,
+        (len, Some(n)) => anyhow::bail!("--nodes {} does not match the {} --cmd flags", n, len),
+    };
     anyhow::ensure!(count > 0, "--nodes must be at least 1");
     let cwd = std::env::current_dir()?;
     Ok((0..count)
         .map(|id| {
+            let (label, cmd) = utils::split_label(&cmds[if cmds.len() == 1 { 0 } else { id }]);
             let mut c = CommandBuilder::new("sh");
             c.args(["-c", &utils::node_command(cmd, id)]);
             c.cwd(&cwd);
-            c
+            (label.unwrap_or("Node").to_string(), c)
         })
         .collect())
 }
@@ -61,15 +69,15 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // Resolve the node commands before terminal setup (so errors print normally)
-    let commands = match (&cli.log_folder, &cli.cmd) {
-        (None, Some(cmd)) => match node_commands(cmd, cli.nodes.unwrap_or(6)) {
+    let commands = match &cli.log_folder {
+        None => match node_commands(&cli.cmd, cli.nodes) {
             Ok(commands) => Some(commands),
             Err(e) => {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
         },
-        _ => None,
+        Some(_) => None,
     };
 
     if let Err(e) = run_app(cli, commands).await {
@@ -79,7 +87,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn run_app(cli: Cli, commands: Option<Vec<CommandBuilder>>) -> Result<()> {
+async fn run_app(cli: Cli, commands: Option<Vec<(String, CommandBuilder)>>) -> Result<()> {
     enable_raw_mode()?;
     execute!(stdout(), EnterAlternateScreen, Hide)?;
     let _guard = TerminalGuard;
@@ -119,7 +127,7 @@ async fn run_app(cli: Cli, commands: Option<Vec<CommandBuilder>>) -> Result<()> 
             .unwrap_or_default()
             .into_iter()
             .enumerate()
-            .map(|(id, cmd)| Node::spawn(id, &log_dir, cmd))
+            .map(|(id, (label, cmd))| Node::spawn(id, label, &log_dir, cmd))
             .collect::<Result<Vec<Node>>>()?;
 
         // Start the summary generation background task when there is a block pattern
