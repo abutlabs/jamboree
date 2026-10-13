@@ -55,14 +55,18 @@ Repeat `--cmd` to run one node per command, in order (`{i}` is still the node in
 panes with the label instead of "Node". A command that itself starts with `NAME=value`
 needs a label or `env` in front, or `NAME` is taken as the label.
 
+For example, four PolkaJam dev validators plus your own client as validator 4, all on
+PolkaJam's dev chain spec:
+
 ```bash
-jam-ui --cmd 'client-a=<command for a client-a node {i}>' \
-       --cmd 'client-a=<command for a client-a node {i}>' \
-       --cmd 'client-b=<command for a client-b node {i}>'
+polkajam --chain dev dump-spec spec.json
+PJ='polkajam=polkajam --chain dev run --temp --dev-validator {i} --rpc-port 1980{i}'
+jam-ui --cmd "$PJ" --cmd "$PJ" --cmd "$PJ" --cmd "$PJ" \
+       --cmd 'mine=./my-jam-node --chain spec.json --validator {i} --bootnode <polkajam node 0 address>'
 ```
 
-The nodes need a shared chain spec and bootnode to form one network; how to set that
-up depends on each client.
+The panes are titled `polkajam 0` to `polkajam 3` and `mine 4`. Chain spec, validator
+keys and bootnode flags differ per client; the PolkaJam part runs as written.
 
 Tried with PolkaJam, Typeberry, SpaceJam and Jamixir dev networks.
 
