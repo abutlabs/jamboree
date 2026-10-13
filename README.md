@@ -37,18 +37,13 @@ jam-ui --nodes 3 --cmd './my-jam-node <flags for node {i}>'
 of your client (keys, ports and data directory per index). Keep `--init` on `docker run`:
 without it the containers keep running after jam-ui quits.
 
-`summary.log` is written when you pass `--summary-regex` with a pattern for your client's
-"block authored" line, where capture group 1 is the block hash:
-
-```bash
-jam-ui --cmd '...' --summary-regex 'Authored block (0x[0-9a-f]+)'
-```
+Every run's logs are saved per node, so a timeline of authored blocks across nodes is one
+grep away, e.g. `grep -h "Authored block" logs/<run>/node_*.log | sort`.
 
 ### Jamixir
 
 ```bash
-jam-ui --nodes 6 --cmd 'cd ~/src/jamixir && ./node.sh {i}' \
-  --summary-regex '\[BLOCK\] ⛓️ Block created successfully\. Header Hash (.+)'
+jam-ui --nodes 6 --cmd 'cd ~/src/jamixir && ./node.sh {i}'
 ```
 
 Extra `node.sh` flags go straight into the command, e.g. `./node.sh {i} -x 4`.
@@ -67,8 +62,7 @@ jam-ui --cmd 'client-a=<command for a client-a node {i}>' \
 ```
 
 The nodes need a shared chain spec and bootnode to form one network; how to set that
-up depends on each client. Clients log authored blocks differently, so a mixed
-`--summary-regex` may need an alternation, e.g. `'(?:Pattern A |Pattern B )(0x[0-9a-f]+)'`.
+up depends on each client.
 
 Tried with PolkaJam, Typeberry, SpaceJam and Jamixir dev networks.
 
@@ -88,7 +82,6 @@ jam-ui --logs logs/20260111_161505 --search "error,warning"
 **CLI Options:**
 - `--cmd [<label>=]<command>`: Shell command that starts a node; `{i}` is the node index. Repeat it for one node per command
 - `--nodes <n>`: Number of nodes to start (default 6, or one per `--cmd`); with `--logs`, number of files to load (default all)
-- `--summary-regex <regex>`: Block-authored line for `summary.log`, capture group 1 = block hash
 - `--search` / `-s`: Comma-separated search terms (max 6) to highlight on startup
 - `--logs` / `-l`: Load logs from folder instead of running nodes (log viewer mode)
 
@@ -132,7 +125,6 @@ All node output is automatically logged to timestamped directories:
 - Location: `logs/YYYYMMDD_HHMMSS/node_<id>.log`
 - Logs are written in real-time as nodes produce output
 - Use **`--logs`** flag to view previously saved logs
-- `summary.log` in the same folder lists the authored blocks per node (see `--summary-regex`)
 
 ## License
 

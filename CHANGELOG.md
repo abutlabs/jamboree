@@ -11,6 +11,4 @@
   `<label>=` prefix titles the panes.
 - Output is saved to `logs/<timestamp>/node_<id>.log`; `--logs <dir>` replays any folder of
   `*.log` files, one pane per file.
-- `--summary-regex` writes `summary.log`, the authored blocks per node, from a pattern for
-  the client's block line.
 - Install with `cargo install --git https://github.com/jamixir/jam-ui`.

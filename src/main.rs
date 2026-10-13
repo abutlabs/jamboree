@@ -2,7 +2,6 @@ mod app;
 mod cli;
 mod event;
 mod node;
-mod summary;
 mod ui;
 mod utils;
 
@@ -97,9 +96,6 @@ async fn run_app(cli: Cli, commands: Vec<(String, CommandBuilder)>) -> Result<()
     let backend = CrosstermBackend::new(stdout());
     let mut terminal = Terminal::new(backend)?;
 
-    // Track the log directory for summary generation
-    let mut summary_tx: Option<tokio::sync::mpsc::Sender<summary::SummaryCommand>> = None;
-
     let (nodes, mut app) = if let Some(log_folder) = &cli.log_folder {
         // Log viewer mode: load from log files
         let log_dir = PathBuf::from(log_folder);
@@ -129,11 +125,6 @@ async fn run_app(cli: Cli, commands: Vec<(String, CommandBuilder)>) -> Result<()
             .map(|(id, (label, cmd))| Node::spawn(id, label, &log_dir, cmd))
             .collect::<Result<Vec<Node>>>()?;
 
-        // Start the summary generation background task when there is a block pattern
-        if let Some(re) = cli.summary_regex.clone() {
-            summary_tx = Some(summary::start_summary_task(log_dir, nodes.len(), re));
-        }
-
         let app = AppState::new(nodes.len(), cli.search);
         (nodes, app)
     };
@@ -159,22 +150,8 @@ async fn run_app(cli: Cli, commands: Vec<(String, CommandBuilder)>) -> Result<()
         if poll(Duration::from_millis(50))? {
             match read()? {
                 Event::Key(k) => {
-                    // Check for 'x' key to trigger summary generation on shutdown
-                    if k.code == crossterm::event::KeyCode::Char('x') && !app.log_viewer_mode {
-                        if let Some(ref tx) = summary_tx {
-                            let _ = tx.try_send(summary::SummaryCommand::Generate);
-                        }
-                    }
-                    
                     match handle_key_event(k.code, k.modifiers, &mut app, &mut focused, &nodes) {
                         Action::Quit => {
-                            // Generate final summary before exiting
-                            if let Some(ref tx) = summary_tx {
-                                let _ = tx.try_send(summary::SummaryCommand::Stop);
-                                // Give a moment for the summary to be written
-                                std::thread::sleep(std::time::Duration::from_millis(100));
-                            }
-                            
                             // Cleanup and exit (process::exit terminates immediately, so guard won't drop)
                             let _ = disable_raw_mode();
                             let _ = execute!(stdout(), LeaveAlternateScreen, Show);
