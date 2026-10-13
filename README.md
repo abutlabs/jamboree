@@ -53,6 +53,32 @@ jam-ui --nodes 6 --cmd 'cd ~/src/jamixir && ./node.sh {i}' \
 
 Extra `node.sh` flags go straight into the command, e.g. `./node.sh {i} -x 4`.
 
+### Mixed clients
+
+Repeat `--cmd` to run one node per command, in order (`{i}` is still the node index, and
+`--nodes` defaults to the number of commands). Prefix a command with `<label>=` to title its
+panes with the label instead of "Node". A command that itself starts with `NAME=value`
+needs a label or `env` in front, or `NAME` is taken as the label.
+
+PolkaJam v0.1.28 validators 0-3, Typeberry v0.11.0 (from source, in `../typeberry`) as
+validator 4 and SpaceJam 0.1.0 as validator 5, all on PolkaJam's dev chain:
+
+```bash
+polkajam --chain dev dump-spec spec.json
+BOOT=eecgwpgwq3noky4ijm4jmvjtmuzv44qvigciusxakq5epnrfj2utb@127.0.0.1:40000   # polkajam dev validator 0
+PJ='polkajam=polkajam --chain dev run --temp --dev-validator {i} --rpc-port 1980{i} --pvm-backend interpreter'
+TB="typeberry=cd ../typeberry && npm start -- --config=dev --config='.chain_spec+={\"bootnodes\":[\"$BOOT\"]}' dev {i}"
+SJ="spacejam=spacejam run -v --chain spec.json --validator {i} -d sjdata --prune --address 127.0.0.1:4000{i} --rpc 127.0.0.1:1980{i} --bootnode $BOOT"
+jam-ui --cmd "$PJ" --cmd "$PJ" --cmd "$PJ" --cmd "$PJ" --cmd "$TB" --cmd "$SJ" \
+  --summary-regex 'Authored block (0x[0-9a-f]+)'
+```
+
+In this setup the PolkaJam nodes author, import and finalize. SpaceJam connects, imports and
+finalizes their blocks but did not author its slot. Typeberry connects to PolkaJam and receives
+its blocks, but rejects them (`Parent ... not found`) and authors on its own chain.
+Clients log authored blocks differently, so one `--summary-regex` may need an alternation,
+e.g. `'(?:Authored block |INFO block#\d+@)(0x[0-9a-f]+)'` for PolkaJam and SpaceJam's dev mode.
+
 ### Tested with
 
 **PolkaJam** ([release binary](https://github.com/paritytech/polkajam-releases), nightly 2026-10-13):
@@ -120,8 +146,8 @@ jam-ui --logs logs/20260111_161505 --search "error,warning"
 ```
 
 **CLI Options:**
-- `--cmd <command>`: Shell command that starts one node; `{i}` is the node index
-- `--nodes <n>`: Number of nodes to start (default 6); with `--logs`, number of files to load (default all)
+- `--cmd [<label>=]<command>`: Shell command that starts a node; `{i}` is the node index. Repeat it for one node per command
+- `--nodes <n>`: Number of nodes to start (default 6, or one per `--cmd`); with `--logs`, number of files to load (default all)
 - `--summary-regex <regex>`: Block-authored line for `summary.log`, capture group 1 = block hash
 - `--search` / `-s`: Comma-separated search terms (max 6) to highlight on startup
 - `--logs` / `-l`: Load logs from folder instead of running nodes (log viewer mode)
