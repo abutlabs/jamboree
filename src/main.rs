@@ -153,11 +153,10 @@ async fn run_app(cli: Cli, commands: Option<Vec<CommandBuilder>>) -> Result<()> 
             match read()? {
                 Event::Key(k) => {
                     // Check for 'x' key to trigger summary generation on shutdown
-                    if k.code == crossterm::event::KeyCode::Char('x')
-                        && !app.log_viewer_mode
-                        && let Some(ref tx) = summary_tx
-                    {
-                        let _ = tx.try_send(summary::SummaryCommand::Generate);
+                    if k.code == crossterm::event::KeyCode::Char('x') && !app.log_viewer_mode {
+                        if let Some(ref tx) = summary_tx {
+                            let _ = tx.try_send(summary::SummaryCommand::Generate);
+                        }
                     }
                     
                     match handle_key_event(k.code, k.modifiers, &mut app, &mut focused, &nodes) {

@@ -70,7 +70,7 @@ pub fn render(f: &mut Frame, node: &Node, app: &AppState) {
             if line_len == 0 {
                 1
             } else {
-                line_len.div_ceil(available_width)
+                (line_len + available_width - 1) / available_width
             }
         })
         .sum();
@@ -91,7 +91,7 @@ pub fn render(f: &mut Frame, node: &Node, app: &AppState) {
         app.frozen_scroll.borrow_mut()[node.id] = max_scroll;
         max_scroll
     };
-    let highlighted_text = highlight_text(&text, app.highlight.as_deref());
+    let highlighted_text = highlight_text(&text, app.highlight.as_ref().map(|v| v.as_slice()));
     let widget = Paragraph::new(highlighted_text)
         .scroll((scroll_y, 0))
         .block(

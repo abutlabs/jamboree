@@ -1,5 +1,5 @@
 use regex::Regex;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::time::{Duration, interval};
@@ -13,7 +13,7 @@ struct BlockEntry {
 }
 
 /// Scans all node log files and extracts block creation events
-fn scan_logs_for_blocks(log_dir: &Path, node_count: usize, block_regex: &Regex) -> Vec<BlockEntry> {
+fn scan_logs_for_blocks(log_dir: &PathBuf, node_count: usize, block_regex: &Regex) -> Vec<BlockEntry> {
     let mut entries = Vec::new();
 
     for id in 0..node_count {
@@ -47,7 +47,7 @@ fn scan_logs_for_blocks(log_dir: &Path, node_count: usize, block_regex: &Regex) 
 }
 
 /// Writes the summary log file
-fn write_summary(log_dir: &Path, node_count: usize, entries: &[BlockEntry]) -> std::io::Result<()> {
+fn write_summary(log_dir: &PathBuf, node_count: usize, entries: &[BlockEntry]) -> std::io::Result<()> {
     use std::io::Write;
 
     let summary_path = log_dir.join("summary.log");
@@ -59,7 +59,7 @@ fn write_summary(log_dir: &Path, node_count: usize, entries: &[BlockEntry]) -> s
     writeln!(file, "Generated at: {}", now)?;
     writeln!(file, "Total blocks: {}", entries.len())?;
     writeln!(file, "{}", "=".repeat(100))?;
-    writeln!(file, "{:<24} | {:<6} | Block Hash", "Timestamp", "Node")?;
+    writeln!(file, "{:<24} | {:<6} | {}", "Timestamp", "Node", "Block Hash")?;
     writeln!(file, "{}", "-".repeat(100))?;
 
     for entry in entries {
@@ -86,7 +86,7 @@ fn write_summary(log_dir: &Path, node_count: usize, entries: &[BlockEntry]) -> s
 }
 
 /// Generates the summary once (called on demand)
-pub fn generate_summary(log_dir: &Path, node_count: usize, block_regex: &Regex) {
+pub fn generate_summary(log_dir: &PathBuf, node_count: usize, block_regex: &Regex) {
     let entries = scan_logs_for_blocks(log_dir, node_count, block_regex);
     if let Err(e) = write_summary(log_dir, node_count, &entries) {
         eprintln!("Failed to write summary: {}", e);

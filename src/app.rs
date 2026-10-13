@@ -185,26 +185,26 @@ impl AppState {
 
     pub fn scroll_delta(&mut self, idx: usize, delta: i16) {
         let mut scroll = self.frozen_scroll.borrow_mut();
-        let next = (scroll[idx] as i16 + delta).clamp(0, 10000);
+        let next = (scroll[idx] as i16 + delta).max(0).min(10000i16);
         scroll[idx] = next as u16;
     }
 
     pub fn remove_tag(&mut self, index: usize) {
-        if let Some(ref mut terms) = self.highlight
-            && index < terms.len()
-        {
-            terms.remove(index);
-            if terms.is_empty() {
-                self.highlight = None;
-                self.selected_tag = None;
-            } else {
-                // Adjust selected tag index if needed
-                if let Some(ref mut selected) = self.selected_tag {
-                    if *selected >= terms.len() {
-                        *selected = terms.len().saturating_sub(1);
-                    }
-                    if *selected > index {
-                        *selected -= 1;
+        if let Some(ref mut terms) = self.highlight {
+            if index < terms.len() {
+                terms.remove(index);
+                if terms.is_empty() {
+                    self.highlight = None;
+                    self.selected_tag = None;
+                } else {
+                    // Adjust selected tag index if needed
+                    if let Some(ref mut selected) = self.selected_tag {
+                        if *selected >= terms.len() {
+                            *selected = terms.len().saturating_sub(1);
+                        }
+                        if *selected > index {
+                            *selected -= 1;
+                        }
                     }
                 }
             }
@@ -212,21 +212,21 @@ impl AppState {
     }
 
     pub fn select_next_tag(&mut self) {
-        if let Some(ref terms) = self.highlight
-            && !terms.is_empty()
-        {
-            let current = self.selected_tag.unwrap_or(0);
-            self.selected_tag = Some((current + 1) % terms.len());
+        if let Some(ref terms) = self.highlight {
+            if !terms.is_empty() {
+                let current = self.selected_tag.unwrap_or(0);
+                self.selected_tag = Some((current + 1) % terms.len());
+            }
         }
     }
 
     pub fn select_prev_tag(&mut self) {
-        if let Some(ref terms) = self.highlight
-            && !terms.is_empty()
-        {
-            let current = self.selected_tag.unwrap_or(0);
-            let len = terms.len();
-            self.selected_tag = Some((current + len - 1) % len);
+        if let Some(ref terms) = self.highlight {
+            if !terms.is_empty() {
+                let current = self.selected_tag.unwrap_or(0);
+                let len = terms.len();
+                self.selected_tag = Some((current + len - 1) % len);
+            }
         }
     }
 

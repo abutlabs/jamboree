@@ -17,7 +17,7 @@ const GREP_INDICATOR: &str = " [GREP]";
 
 pub fn grid_menu(app: &AppState, has_tags: bool) -> String {
     match app.search_mode {
-        true => SEARCH_MENU.replace("{}", &app.search_input),
+        true => format!("{}", SEARCH_MENU.replace("{}", &app.search_input)),
         false => {
             let base_menu = match app.log_viewer_mode {
                 true => GRID_MENU_LOG_VIEWER,
@@ -43,7 +43,7 @@ pub fn grid_menu(app: &AppState, has_tags: bool) -> String {
 
 pub fn focused_menu(app: &AppState, has_tags: bool) -> String {
     match app.search_mode {
-        true => SEARCH_MENU.replace("{}", &app.search_input),
+        true => format!("{}", SEARCH_MENU.replace("{}", &app.search_input)),
         false => {
             let base_menu = match app.log_viewer_mode {
                 true => FOCUSED_MENU_LOG_VIEWER,

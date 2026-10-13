@@ -57,7 +57,7 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState) {
 
     let count = visible.len();
     let cols = (count as f64).sqrt().ceil() as usize;
-    let rows = count.div_ceil(cols);
+    let rows = (count + cols - 1) / cols;
 
     let row_constraints = vec![Constraint::Percentage(100 / rows as u16); rows];
     let row_chunks = Layout::default()
@@ -117,7 +117,7 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState) {
             };
 
             // ---- HIGHLIGHT ----
-            let content = highlight_text(&text, app.highlight.as_deref());
+            let content = highlight_text(&text, app.highlight.as_ref().map(|v| v.as_slice()));
 
             // ---- RENDER ----
             let widget = Paragraph::new(content).scroll((scroll_y, 0)).block(

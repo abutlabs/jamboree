@@ -3,7 +3,7 @@ use portable_pty::{CommandBuilder, MasterPty, NativePtySystem, PtySize, PtySyste
 use std::{
     fs::{File, OpenOptions},
     io::{Read, Write},
-    path::Path,
+    path::PathBuf,
     process,
     sync::{Arc, Mutex},
 };
@@ -21,7 +21,7 @@ pub struct Node {
 }
 
 impl Node {
-    pub fn spawn(id: usize, log_dir: &Path, cmd: CommandBuilder) -> Result<Self> {
+    pub fn spawn(id: usize, log_dir: &PathBuf, cmd: CommandBuilder) -> Result<Self> {
         let pty_system = NativePtySystem::default();
 
         let pair = pty_system.openpty(PtySize {
@@ -140,14 +140,14 @@ impl Node {
         if let Some(ref master) = self.master {
             let mut current = self.current_size.lock().unwrap();
             if current.rows != new_size.rows || current.cols != new_size.cols {
-                let _ = master.resize(new_size);
+                let _ = master.resize(new_size.clone());
                 *current = new_size;
             }
         }
     }
 
     /// Load node from log file (for log viewer mode)
-    pub fn from_log_file(id: usize, log_path: &Path) -> Result<Self> {
+    pub fn from_log_file(id: usize, log_path: &PathBuf) -> Result<Self> {
         let buffer = Arc::new(Mutex::new(String::new()));
         let paused_buffer = Arc::new(Mutex::new(String::new()));
         let current_size = Arc::new(Mutex::new(PtySize {
