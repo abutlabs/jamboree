@@ -18,6 +18,7 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
+use portable_pty::CommandBuilder;
 use ratatui::prelude::*;
 use std::{io::stdout, path::PathBuf, process, time::Duration};
 
@@ -25,27 +26,27 @@ use crate::event::{Action, handle_key_event, handle_mouse_event};
 use crate::ui::focused;
 use crate::ui::help;
 use ui::grid;
-use std::collections::HashMap;
 
-fn parse_skip_announcements(skip_str: &Option<String>) -> HashMap<usize, String> {
-    let mut map = HashMap::new();
-    
-    if let Some(s) = skip_str {
-        // Parse format: "0:4" or "0:4,1:5" (node_id:skip_node_ids)
-        for part in s.split(',') {
-            let part = part.trim();
-            if let Some(colon_pos) = part.find(':') {
-                let node_id_str = &part[..colon_pos];
-                let skip_ids = &part[colon_pos + 1..];
-                
-                if let Ok(node_id) = node_id_str.parse::<usize>() {
-                    map.insert(node_id, skip_ids.to_string());
-                }
-            }
-        }
-    }
-    
-    map
+/// One labelled `sh -c` command per node, with `{i}` replaced by the node index:
+/// a single --cmd is the template for every node, several --cmd give one node each
+fn node_commands(cmds: &[String], nodes: Option<usize>) -> Result<Vec<(String, CommandBuilder)>> {
+    let count = match (cmds.len(), nodes) {
+        (1, n) => n.unwrap_or(6),
+        (len, None) => len,
+        (len, Some(n)) if n == len => n,
+        (len, Some(n)) => anyhow::bail!("--nodes {} does not match the {} --cmd flags", n, len),
+    };
+    anyhow::ensure!(count > 0, "--nodes must be at least 1");
+    let cwd = std::env::current_dir()?;
+    Ok((0..count)
+        .map(|id| {
+            let (label, cmd) = utils::split_label(&cmds[if cmds.len() == 1 { 0 } else { id }]);
+            let mut c = CommandBuilder::new("sh");
+            c.args(["-c", &utils::node_command(cmd, id)]);
+            c.cwd(&cwd);
+            (label.unwrap_or("Node").to_string(), c)
+        })
+        .collect())
 }
 
 pub enum ViewMode {
@@ -67,17 +68,26 @@ async fn main() -> Result<()> {
     // Parse CLI first, before terminal setup (so --help works properly)
     let cli = Cli::parse();
 
-    // Clean up any leftover build lock from incomplete previous builds
-    utils::cleanup_build_lock();
+    // Resolve the node commands before terminal setup (so errors print normally)
+    let commands = match &cli.log_folder {
+        None => match node_commands(&cli.cmd, cli.nodes) {
+            Ok(commands) => commands,
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        },
+        Some(_) => Vec::new(),
+    };
 
-    if let Err(e) = run_app(cli).await {
+    if let Err(e) = run_app(cli, commands).await {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     }
     Ok(())
 }
 
-async fn run_app(cli: Cli) -> Result<()> {
+async fn run_app(cli: Cli, commands: Vec<(String, CommandBuilder)>) -> Result<()> {
     enable_raw_mode()?;
     execute!(stdout(), EnterAlternateScreen, Hide)?;
     let _guard = TerminalGuard;
@@ -95,12 +105,10 @@ async fn run_app(cli: Cli) -> Result<()> {
         let log_dir = PathBuf::from(log_folder);
         let mut nodes = Vec::new();
 
-        // Try to load node_0.log through node_5.log
-        for id in 0..6 {
-            let log_path = log_dir.join(format!("node_{}.log", id));
-            if log_path.exists() {
-                nodes.push(Node::from_log_file(id, &log_path)?);
-            }
+        // One pane per *.log file, up to --nodes
+        let files = utils::find_log_files(&log_dir)?;
+        for (id, log_path) in files.iter().take(cli.nodes.unwrap_or(usize::MAX)).enumerate() {
+            nodes.push(Node::from_log_file(id, log_path)?);
         }
 
         if nodes.is_empty() {
@@ -115,18 +123,16 @@ async fn run_app(cli: Cli) -> Result<()> {
         let log_dir = PathBuf::from("logs").join(datetime);
         std::fs::create_dir_all(&log_dir)?;
 
-        // Parse skip_announcements_to format: "0:4" or "0:4,1:5" (node_id:skip_node_id)
-        let skip_map = parse_skip_announcements(&cli.skip_announcements_to);
-        
-        let nodes = (0..6)
-            .map(|id| {
-                let skip_to = skip_map.get(&id).cloned();
-                Node::spawn(id, &log_dir, skip_to)
-            })
+        let nodes = commands
+            .into_iter()
+            .enumerate()
+            .map(|(id, (label, cmd))| Node::spawn(id, label, &log_dir, cmd))
             .collect::<Result<Vec<Node>>>()?;
 
-        // Start the summary generation background task
-        summary_tx = Some(summary::start_summary_task(log_dir));
+        // Start the summary generation background task when there is a block pattern
+        if let Some(re) = cli.summary_regex.clone() {
+            summary_tx = Some(summary::start_summary_task(log_dir, nodes.len(), re));
+        }
 
         let app = AppState::new(nodes.len(), cli.search);
         (nodes, app)

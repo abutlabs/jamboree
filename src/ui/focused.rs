@@ -97,7 +97,8 @@ pub fn render(f: &mut Frame, node: &Node, app: &AppState) {
         .block(
             Block::default()
                 .title(format!(
-                    "Node {} (ZOOM){}",
+                    "{} {} (ZOOM){}",
+                    node.label,
                     node.id,
                     if paused { " [PAUSED]" } else { "" }
                 ))

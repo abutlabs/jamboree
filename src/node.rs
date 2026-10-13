@@ -12,6 +12,8 @@ use tokio::task;
 
 pub struct Node {
     pub id: usize,
+    /// Pane title prefix: the --cmd label, or "Node"
+    pub label: String,
     master: Option<Box<dyn MasterPty + Send>>,
     buffer: Arc<Mutex<String>>,
     paused_buffer: Arc<Mutex<String>>,
@@ -21,7 +23,7 @@ pub struct Node {
 }
 
 impl Node {
-    pub fn spawn(id: usize, log_dir: &PathBuf, skip_to: Option<String>) -> Result<Self> {
+    pub fn spawn(id: usize, label: String, log_dir: &PathBuf, cmd: CommandBuilder) -> Result<Self> {
         let pty_system = NativePtySystem::default();
 
         let pair = pty_system.openpty(PtySize {
@@ -31,21 +33,6 @@ impl Node {
             pixel_height: 0,
         })?;
         let master = pair.master;
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        // Assume structure: parent/jamixir/ and parent/jam-ui/
-        let parent_dir = std::path::Path::new(manifest_dir).parent().unwrap();
-        let jamixir_root = parent_dir.join("jamixir");
-
-        let mut cmd = CommandBuilder::new(jamixir_root.join("node.sh"));
-        cmd.arg(id.to_string());
-        
-        // Pass through skip announcement flag if provided
-        if let Some(node_ids) = skip_to {
-            cmd.arg("-x");
-            cmd.arg(node_ids);
-        }
-        
-        cmd.cwd(&jamixir_root);
 
         let buffer = Arc::new(Mutex::new(String::new()));
         let paused_buffer = Arc::new(Mutex::new(String::new()));
@@ -60,6 +47,7 @@ impl Node {
 
         let node = Node {
             id,
+            label,
             master: Some(master),
             buffer,
             paused_buffer,
@@ -176,6 +164,7 @@ impl Node {
 
         let node = Node {
             id,
+            label: "Node".to_string(),
             master: None,
             buffer,
             paused_buffer,
