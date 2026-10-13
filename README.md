@@ -27,14 +27,15 @@ is replaced by the node index (0, 1, 2, ...). `--nodes` sets how many nodes to s
 
 ```bash
 # Docker: one container per node
-jam-ui --nodes 4 --cmd 'docker run --rm --name jam-node-{i} <image> <flags for node {i}>'
+jam-ui --nodes 4 --cmd 'docker run --rm --init --name jam-node-{i} <image> <flags for node {i}>'
 
 # A local binary
 jam-ui --nodes 3 --cmd './my-jam-node <flags for node {i}>'
 ```
 
 `<image>`, `./my-jam-node` and the flags are placeholders: use whatever starts one node
-of your client (keys, ports and data directory per index).
+of your client (keys, ports and data directory per index). Keep `--init` on `docker run`:
+without it the containers keep running after jam-ui quits.
 
 `summary.log` is written when you pass `--summary-regex` with a pattern for your client's
 "block authored" line, where capture group 1 is the block hash:
@@ -51,6 +52,15 @@ jam-ui --nodes 6 --cmd 'cd ~/src/jamixir && ./node.sh {i}' \
 ```
 
 Extra `node.sh` flags go straight into the command, e.g. `./node.sh {i} -x 4`.
+
+### Tested with
+
+| Client | Command | Status |
+| ------ | ------- | ------ |
+| [PolkaJam](https://github.com/paritytech/polkajam-releases) nightly 2026-10-13, release binary | `jam-ui --nodes 6 --cmd 'polkajam --chain dev run --temp --dev-validator {i} --rpc-port 1980{i} --pvm-backend interpreter' --summary-regex 'Authored block (0x[0-9a-f]+)'` | Works: a 6-validator dev chain that authors, imports and finalizes blocks. `--pvm-backend interpreter` is only needed where `vm.unprivileged_userfaultfd` is off. The hashes in its log are shortened, so the summary shows the first 8 bytes. |
+| [Typeberry](https://github.com/FluffyLabs/typeberry) 0.11.0, `ghcr.io/fluffylabs/typeberry:latest` | `jam-ui --nodes 2 --cmd 'docker run --rm --init --name jam-ui-typeberry-{i} ghcr.io/fluffylabs/typeberry:latest dev {i}'` | Partial: the dev node starts and logs, then stops when block authoring begins (`Cannot find package 'tsx'` in this image). |
+| [SpaceJam](https://github.com/spacejamapp/spacejam) 0.1.0 release binary and `ghcr.io/spacejamapp/spacejam:0.1.2` | `spacejam run --dev -d ./data/0` | No: the dev node exits with `failed to decode recent blocks` when it authors its first block. |
+| [Boka](https://github.com/open-web3-stack/boka), `acala/boka:latest` | `docker run --rm acala/boka:latest --dev --dev-seed 0 --rpc no` | No: the node logs its genesis and shuts down right away. |
 
 ### Search and log viewer
 
