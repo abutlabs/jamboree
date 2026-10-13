@@ -9,7 +9,7 @@ mod utils;
 use crate::app::AppState;
 use crate::cli::Cli;
 use crate::node::Node;
-use anyhow::{Context, Result, anyhow};
+use anyhow::Result;
 use chrono::Local;
 use clap::Parser;
 use crossterm::{
@@ -26,75 +26,16 @@ use crate::event::{Action, handle_key_event, handle_mouse_event};
 use crate::ui::focused;
 use crate::ui::help;
 use ui::grid;
-use std::collections::HashMap;
 
-fn parse_skip_announcements(skip_str: &Option<String>) -> HashMap<usize, String> {
-    let mut map = HashMap::new();
-    
-    if let Some(s) = skip_str {
-        // Parse format: "0:4" or "0:4,1:5" (node_id:skip_node_ids)
-        for part in s.split(',') {
-            let part = part.trim();
-            if let Some(colon_pos) = part.find(':') {
-                let node_id_str = &part[..colon_pos];
-                let skip_ids = &part[colon_pos + 1..];
-                
-                if let Ok(node_id) = node_id_str.parse::<usize>() {
-                    map.insert(node_id, skip_ids.to_string());
-                }
-            }
-        }
-    }
-    
-    map
-}
-
-/// One command per node: `--cmd` through `sh -c`, otherwise Jamixir's node.sh
-fn node_commands(cli: &Cli) -> Result<Vec<CommandBuilder>> {
-    let count = cli.nodes.unwrap_or(6);
+/// One `sh -c` command per node, with `{i}` replaced by the node index
+fn node_commands(cmd: &str, count: usize) -> Result<Vec<CommandBuilder>> {
     anyhow::ensure!(count > 0, "--nodes must be at least 1");
-    if let Some(cmd) = &cli.cmd {
-        let cwd = std::env::current_dir()?;
-        return Ok((0..count)
-            .map(|id| {
-                let mut c = CommandBuilder::new("sh");
-                c.args(["-c", &utils::node_command(cmd, id)]);
-                c.cwd(&cwd);
-                c
-            })
-            .collect());
-    }
-
-    let root = match &cli.jamixir {
-        Some(path) => path.clone(),
-        None => utils::find_jamixir_root().ok_or_else(|| {
-            anyhow!(
-                "no jamixir/node.sh found next to the current directory or the jam-ui binary\n\
-                 use --jamixir <path> for a Jamixir checkout, or --cmd '<command with {{i}}>' for any other client"
-            )
-        })?,
-    };
-    let root = std::fs::canonicalize(&root)
-        .ok()
-        .filter(|r| r.join("node.sh").is_file())
-        .with_context(|| format!("no node.sh in {}", root.display()))?;
-
-    // Clean up any leftover build lock from incomplete previous builds
-    utils::cleanup_build_lock(&root);
-
-    // Parse skip_announcements_to format: "0:4" or "0:4,1:5" (node_id:skip_node_id)
-    let skip_map = parse_skip_announcements(&cli.skip_announcements_to);
-
+    let cwd = std::env::current_dir()?;
     Ok((0..count)
         .map(|id| {
-            let mut c = CommandBuilder::new(root.join("node.sh"));
-            c.arg(id.to_string());
-            // Pass through skip announcement flag if provided
-            if let Some(node_ids) = skip_map.get(&id) {
-                c.arg("-x");
-                c.arg(node_ids);
-            }
-            c.cwd(&root);
+            let mut c = CommandBuilder::new("sh");
+            c.args(["-c", &utils::node_command(cmd, id)]);
+            c.cwd(&cwd);
             c
         })
         .collect())
@@ -120,15 +61,15 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // Resolve the node commands before terminal setup (so errors print normally)
-    let commands = match &cli.log_folder {
-        Some(_) => None,
-        None => match node_commands(&cli) {
+    let commands = match (&cli.log_folder, &cli.cmd) {
+        (None, Some(cmd)) => match node_commands(cmd, cli.nodes.unwrap_or(6)) {
             Ok(commands) => Some(commands),
             Err(e) => {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
         },
+        _ => None,
     };
 
     if let Err(e) = run_app(cli, commands).await {
@@ -181,13 +122,8 @@ async fn run_app(cli: Cli, commands: Option<Vec<CommandBuilder>>) -> Result<()> 
             .map(|(id, cmd)| Node::spawn(id, &log_dir, cmd))
             .collect::<Result<Vec<Node>>>()?;
 
-        // Start the summary generation background task (Jamixir's line unless --cmd without a pattern)
-        let summary_regex = match (&cli.summary_regex, &cli.cmd) {
-            (Some(re), _) => Some(re.clone()),
-            (None, None) => Some(summary::jamixir_block_regex()),
-            (None, Some(_)) => None,
-        };
-        if let Some(re) = summary_regex {
+        // Start the summary generation background task when there is a block pattern
+        if let Some(re) = cli.summary_regex.clone() {
             summary_tx = Some(summary::start_summary_task(log_dir, nodes.len(), re));
         }
 

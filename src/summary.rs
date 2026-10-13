@@ -12,11 +12,6 @@ struct BlockEntry {
     block_hash: String,
 }
 
-/// Jamixir's block-authored line, capture group 1 = header hash
-pub fn jamixir_block_regex() -> Regex {
-    Regex::new(r"\[BLOCK\] ⛓️ Block created successfully\. Header Hash (.+)").unwrap()
-}
-
 /// Scans all node log files and extracts block creation events
 fn scan_logs_for_blocks(log_dir: &Path, node_count: usize, block_regex: &Regex) -> Vec<BlockEntry> {
     let mut entries = Vec::new();
@@ -29,7 +24,6 @@ fn scan_logs_for_blocks(log_dir: &Path, node_count: usize, block_regex: &Regex) 
 
         if let Ok(content) = std::fs::read_to_string(&log_path) {
             for line in content.lines() {
-                // e.g. "[BLOCK] ⛓️ Block created successfully. Header Hash 0x..."
                 if let Some(hash) = block_regex.captures(line).and_then(|c| c.get(1)) {
                     // Extract timestamp from beginning of line (format: "2026-01-26 11:01:30.018")
                     let timestamp = match line.get(..23) {
@@ -162,7 +156,7 @@ mod tests {
         let entries = scan(
             "2026-01-26 11:01:30.018 [BLOCK] ⛓️ Block created successfully. Header Hash 0xabc \n\
              2026-01-26 11:01:31.000 [info] imported\n",
-            &jamixir_block_regex(),
+            &Regex::new(r"\[BLOCK\] ⛓️ Block created successfully\. Header Hash (.+)").unwrap(),
         );
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].timestamp, "2026-01-26 11:01:30.018");

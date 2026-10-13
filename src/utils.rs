@@ -1,25 +1,5 @@
 use std::path::{Path, PathBuf};
 
-/// Find a `jamixir/` checkout with a node.sh next to the current directory or the jam-ui binary
-pub fn find_jamixir_root() -> Option<PathBuf> {
-    let cwd = std::env::current_dir().ok();
-    let exe = std::env::current_exe().ok();
-    [cwd, exe]
-        .into_iter()
-        .flatten()
-        .flat_map(|start| start.ancestors().map(Path::to_path_buf).collect::<Vec<_>>())
-        .map(|dir| dir.join("jamixir"))
-        .find(|root| root.join("node.sh").is_file())
-}
-
-/// Remove .build.lock directory if it exists (from incomplete previous build)
-pub fn cleanup_build_lock(jamixir_root: &Path) {
-    let build_lock = jamixir_root.join(".build.lock");
-    if build_lock.exists() {
-        let _ = std::fs::remove_dir_all(&build_lock);
-    }
-}
-
 /// The node logs in a folder: every `*.log` except summary.log, in natural order (node_2 before node_10)
 pub fn find_log_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
     let mut files: Vec<PathBuf> = std::fs::read_dir(dir)?
