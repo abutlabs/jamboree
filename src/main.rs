@@ -71,13 +71,13 @@ async fn main() -> Result<()> {
     // Resolve the node commands before terminal setup (so errors print normally)
     let commands = match &cli.log_folder {
         None => match node_commands(&cli.cmd, cli.nodes) {
-            Ok(commands) => Some(commands),
+            Ok(commands) => commands,
             Err(e) => {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
         },
-        Some(_) => None,
+        Some(_) => Vec::new(),
     };
 
     if let Err(e) = run_app(cli, commands).await {
@@ -87,7 +87,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn run_app(cli: Cli, commands: Option<Vec<(String, CommandBuilder)>>) -> Result<()> {
+async fn run_app(cli: Cli, commands: Vec<(String, CommandBuilder)>) -> Result<()> {
     enable_raw_mode()?;
     execute!(stdout(), EnterAlternateScreen, Hide)?;
     let _guard = TerminalGuard;
@@ -124,7 +124,6 @@ async fn run_app(cli: Cli, commands: Option<Vec<(String, CommandBuilder)>>) -> R
         std::fs::create_dir_all(&log_dir)?;
 
         let nodes = commands
-            .unwrap_or_default()
             .into_iter()
             .enumerate()
             .map(|(id, (label, cmd))| Node::spawn(id, label, &log_dir, cmd))
