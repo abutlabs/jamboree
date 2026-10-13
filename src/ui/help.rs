@@ -40,7 +40,7 @@ pub fn render(f: &mut Frame) {
   Tab / Shift+Tab Cycle focus between nodes
   Enter           Zoom into focused node
   Esc             Return to grid view / Cancel
-  0-5             Toggle node visibility
+  0-9             Toggle node visibility
 
   SEARCH & FILTER
   ─────────────────────────────────────────────────────

@@ -51,10 +51,11 @@ fn parse_skip_announcements(skip_str: &Option<String>) -> HashMap<usize, String>
 
 /// One command per node: `--cmd` through `sh -c`, otherwise Jamixir's node.sh
 fn node_commands(cli: &Cli) -> Result<Vec<CommandBuilder>> {
-    anyhow::ensure!(cli.nodes > 0, "--nodes must be at least 1");
+    let count = cli.nodes.unwrap_or(6);
+    anyhow::ensure!(count > 0, "--nodes must be at least 1");
     if let Some(cmd) = &cli.cmd {
         let cwd = std::env::current_dir()?;
-        return Ok((0..cli.nodes)
+        return Ok((0..count)
             .map(|id| {
                 let mut c = CommandBuilder::new("sh");
                 c.args(["-c", &utils::node_command(cmd, id)]);
@@ -84,7 +85,7 @@ fn node_commands(cli: &Cli) -> Result<Vec<CommandBuilder>> {
     // Parse skip_announcements_to format: "0:4" or "0:4,1:5" (node_id:skip_node_id)
     let skip_map = parse_skip_announcements(&cli.skip_announcements_to);
 
-    Ok((0..cli.nodes)
+    Ok((0..count)
         .map(|id| {
             let mut c = CommandBuilder::new(root.join("node.sh"));
             c.arg(id.to_string());
@@ -155,12 +156,10 @@ async fn run_app(cli: Cli, commands: Option<Vec<CommandBuilder>>) -> Result<()> 
         let log_dir = PathBuf::from(log_folder);
         let mut nodes = Vec::new();
 
-        // Try to load node_0.log through node_5.log
-        for id in 0..6 {
-            let log_path = log_dir.join(format!("node_{}.log", id));
-            if log_path.exists() {
-                nodes.push(Node::from_log_file(id, &log_path)?);
-            }
+        // One pane per *.log file, up to --nodes
+        let files = utils::find_log_files(&log_dir)?;
+        for (id, log_path) in files.iter().take(cli.nodes.unwrap_or(usize::MAX)).enumerate() {
+            nodes.push(Node::from_log_file(id, log_path)?);
         }
 
         if nodes.is_empty() {

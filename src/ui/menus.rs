@@ -3,8 +3,8 @@ use crate::AppState;
 // Menu constants
 const SEARCH_MENU: &str = " Search: {}_  [Enter] Apply  [Esc] Cancel ";
 
-const GRID_MENU_LOG_VIEWER: &str = " [0-5] Node  [Tab] Focus  [/] Search  [Enter] Zoom  [?] Help  [q] Quit";
-const GRID_MENU_NORMAL: &str = " [0-5] Node  [Tab] Focus  [/] Search  [Space] Pause  [Enter] Zoom  [?] Help  [q] Quit";
+const GRID_MENU_LOG_VIEWER: &str = " [0-9] Node  [Tab] Focus  [/] Search  [Enter] Zoom  [?] Help  [q] Quit";
+const GRID_MENU_NORMAL: &str = " [0-9] Node  [Tab] Focus  [/] Search  [Space] Pause  [Enter] Zoom  [?] Help  [q] Quit";
 
 const FOCUSED_MENU_LOG_VIEWER: &str = " [Esc] Grid  [/] Search  [?] Help  [q] Quit";
 const FOCUSED_MENU_NORMAL: &str = " [Esc] Grid  [/] Search  [Space] Pause  [?] Help  [q] Quit";

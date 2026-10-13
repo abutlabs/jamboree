@@ -232,7 +232,7 @@ pub fn handle_key_event(
         KeyCode::Enter => Action::ChangeView(ViewMode::Focused(*focused)),
 
         // Node visibility toggle
-        KeyCode::Char(c @ '0'..='5') => {
+        KeyCode::Char(c @ '0'..='9') => {
             let idx = (c as usize) - ('0' as usize);
             if idx < nodes.len() {
                 app.hidden[idx] = !app.hidden[idx];
