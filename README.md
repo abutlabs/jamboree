@@ -55,12 +55,56 @@ Extra `node.sh` flags go straight into the command, e.g. `./node.sh {i} -x 4`.
 
 ### Tested with
 
-| Client | Command | Status |
-| ------ | ------- | ------ |
-| [PolkaJam](https://github.com/paritytech/polkajam-releases) nightly 2026-10-13, release binary | `jam-ui --nodes 6 --cmd 'polkajam --chain dev run --temp --dev-validator {i} --rpc-port 1980{i} --pvm-backend interpreter' --summary-regex 'Authored block (0x[0-9a-f]+)'` | Works: a 6-validator dev chain that authors, imports and finalizes blocks. `--pvm-backend interpreter` is only needed where `vm.unprivileged_userfaultfd` is off. The hashes in its log are shortened, so the summary shows the first 8 bytes. |
-| [Typeberry](https://github.com/FluffyLabs/typeberry) 0.11.0, `ghcr.io/fluffylabs/typeberry:latest` | `jam-ui --nodes 2 --cmd 'docker run --rm --init --name jam-ui-typeberry-{i} ghcr.io/fluffylabs/typeberry:latest dev {i}'` | Partial: the dev node starts and logs, then stops when block authoring begins (`Cannot find package 'tsx'` in this image). |
-| [SpaceJam](https://github.com/spacejamapp/spacejam) 0.1.0 release binary and `ghcr.io/spacejamapp/spacejam:0.1.2` | `spacejam run --dev -d ./data/0` | No: the dev node exits with `failed to decode recent blocks` when it authors its first block. |
-| [Boka](https://github.com/open-web3-stack/boka), `acala/boka:latest` | `docker run --rm acala/boka:latest --dev --dev-seed 0 --rpc no` | No: the node logs its genesis and shuts down right away. |
+**PolkaJam** ([release binary](https://github.com/paritytech/polkajam-releases), nightly 2026-10-13):
+works. A 6-validator dev chain that authors, imports and finalizes blocks.
+
+```bash
+jam-ui --nodes 6 --cmd 'polkajam --chain dev run --temp --dev-validator {i} --rpc-port 1980{i} --pvm-backend interpreter' \
+  --summary-regex 'Authored block (0x[0-9a-f]+)'
+```
+
+`--pvm-backend interpreter` is only needed where `vm.unprivileged_userfaultfd` is off.
+PolkaJam shortens hashes in its log, so the summary shows the first 8 bytes.
+
+**Typeberry** ([source](https://github.com/FluffyLabs/typeberry), v0.11.0): works from a source
+checkout. Six dev nodes connect, author and import blocks, the same setup as its
+`npm run tiny-network`.
+
+```bash
+git clone --branch v0.11.0 https://github.com/FluffyLabs/typeberry && cd typeberry && npm ci
+jam-ui --nodes 6 --cmd 'npm start -- dev {i}'
+```
+
+The published `ghcr.io/fluffylabs/typeberry` image and the `@typeberry/jam` npm package
+(0.10.0, 0.11.0) start, but stop as soon as they author (`Cannot find package 'tsx'`).
+
+**SpaceJam** ([release binary](https://github.com/spacejamapp/spacejam), 0.1.0): authors, as
+independent single-node dev chains. It needs a Gray Paper 0.7.2 chain spec; its built-in
+dev spec fails with `failed to decode recent blocks`. PolkaJam v0.1.28 (GP 0.7.2) writes one:
+
+```bash
+polkajam --chain dev dump-spec spec.json
+jam-ui --nodes 3 --cmd 'spacejam run -v --dev --chain spec.json -d data/{i} --prune --rpc 127.0.0.1:1990{i}'
+```
+
+It can also join a PolkaJam v0.1.28 dev network as validator 5. There it imports and finalizes
+the PolkaJam blocks, but it did not author its own slot in our run:
+
+```bash
+jam-ui --nodes 6 --cmd 'if [ {i} = 5 ]; then spacejam run -v --chain spec.json --validator 5 -d sjdata --prune --address 127.0.0.1:40005 --rpc 127.0.0.1:19805 --bootnode eecgwpgwq3noky4ijm4jmvjtmuzv44qvigciusxakq5epnrfj2utb@127.0.0.1:40000; else polkajam --chain dev run --temp --dev-validator {i} --rpc-port 1980{i} --pvm-backend interpreter; fi'
+```
+
+**JamZig** ([conformance binaries](https://github.com/jamzig/conformance-releases), GP 0.7.2):
+imports only. The release is a conformance target plus a fuzzer, with no network or authoring
+mode. jam-ui can show both side by side:
+
+```bash
+jam-ui --nodes 2 --cmd 'if [ {i} = 0 ]; then jam_conformance_target -v --socket /tmp/jamzig.sock; else sleep 1; jam_conformance_fuzzer --socket /tmp/jamzig.sock --blocks 50; fi'
+```
+
+**Boka** (`acala/boka:latest`): doesn't run.
+`docker run --rm acala/boka:latest --dev --dev-seed 0 --rpc no` logs its genesis and shuts down
+right away.
 
 ### Search and log viewer
 
