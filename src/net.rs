@@ -2,6 +2,7 @@
 //! that are cut off from each other (an isolated node, or the two sides of a split).
 //! Default: shares the genesis port with the node. --move-ports: the node moves to $PORT.
 
+use crate::node::{mark_all, Node};
 use anyhow::Result;
 use socket2::{Domain, Socket, Type};
 use std::{
@@ -28,8 +29,8 @@ struct Shared {
     relayed: Mutex<Vec<bool>>,
     /// Nodes cut off from all others
     isolated: Mutex<Vec<bool>>,
-    /// Nodes from this index on are split off from the ones before
-    split_at: Mutex<Option<usize>>,
+    /// Side of the split each node is on: 0 everywhere is no split
+    side: Mutex<Vec<usize>>,
     /// Which node owns a local UDP port, as last looked up
     owners: Mutex<HashMap<u16, (Option<usize>, Instant)>>,
 }
@@ -57,7 +58,7 @@ impl Net {
             containers,
             relayed: Mutex::new(vec![false; n]),
             isolated: Mutex::new(vec![false; n]),
-            split_at: Mutex::new(None),
+            side: Mutex::new(vec![0; n]),
             owners: Mutex::new(HashMap::new()),
         });
         let watcher = shared.clone();
@@ -74,30 +75,48 @@ impl Net {
         self.shared.isolated.lock().unwrap()[i]
     }
 
-    /// Side of the split node i is on, if the network is split
+    /// Side of the split node i is on (A, B, ...), if the network is split
     pub fn split_side(&self, i: usize) -> Option<char> {
-        let at = (*self.shared.split_at.lock().unwrap())?;
-        Some(if i < at { 'A' } else { 'B' })
+        let side = self.shared.side.lock().unwrap();
+        side.iter()
+            .any(|&s| s != 0)
+            .then(|| (b'A' + side[i] as u8) as char)
     }
 
-    /// Cut node i off from every other node, or heal it. Returns whether it is now isolated.
-    pub fn toggle_isolated(&self, i: usize) -> Result<bool, String> {
-        self.shared.all_relayed()?;
-        let mut isolated = self.shared.isolated.lock().unwrap();
-        isolated[i] = !isolated[i];
-        Ok(isolated[i])
+    /// Cut node i off from every other node, or heal it, and mark it in every log
+    pub fn set_isolated(&self, nodes: &[Node], i: usize, on: bool) {
+        if let Err(why) = self.shared.all_relayed() {
+            return nodes[i].mark(&why);
+        }
+        self.shared.isolated.lock().unwrap()[i] = on;
+        let what = if on { "isolated" } else { "healed" };
+        mark_all(
+            nodes,
+            &format!("{} {} {}", nodes[i].label, nodes[i].id, what),
+        );
     }
 
-    /// Split nodes `at..` off from nodes `..at`, or heal the split. Returns whether it is now
-    /// split.
-    pub fn toggle_split(&self, at: usize) -> Result<bool, String> {
-        self.shared.all_relayed()?;
-        let mut split_at = self.shared.split_at.lock().unwrap();
-        *split_at = match *split_at {
-            Some(_) => None,
-            None => Some(at),
+    /// Cut nodes on different sides off from each other (all 0 heals), and mark it in every
+    /// log, e.g. "split 0-2 | 3-5"
+    pub fn set_split(&self, nodes: &[Node], sides: Vec<usize>) {
+        if let Err(why) = self.shared.all_relayed() {
+            let first_b = sides.iter().position(|&s| s != 0).unwrap_or(0);
+            return nodes[first_b].mark(&why);
+        }
+        // Each run of nodes on one side, in node order
+        let mut end = 0;
+        let runs: Vec<String> = (sides.chunk_by(|a, b| a == b))
+            .map(|run| {
+                end += run.len();
+                format!("{}-{}", end - run.len(), end - 1)
+            })
+            .collect();
+        let what = match runs.len() {
+            1 => "split healed".to_string(),
+            _ => format!("split {}", runs.join(" | ")),
         };
-        Ok(split_at.is_some())
+        *self.shared.side.lock().unwrap() = sides;
+        mark_all(nodes, &what);
     }
 }
 
@@ -183,24 +202,25 @@ impl Shared {
     /// Whether traffic between the sender on local port `port` and node j is cut
     fn cut(&self, port: u16, j: usize) -> bool {
         let isolated = self.isolated.lock().unwrap().clone();
-        let split_at = *self.split_at.lock().unwrap();
-        if split_at.is_none() && !isolated.contains(&true) {
+        let side = self.side.lock().unwrap().clone();
+        if !side.iter().any(|&s| s != 0) && !isolated.contains(&true) {
             return false;
         }
         // Nodes in different groups are cut off: an isolated node is a group of its own
         let group = |k: usize| match isolated[k] {
             true => usize::MAX - k,
-            false => split_at.map_or(0, |at| usize::from(k >= at)),
+            false => side[k],
         };
         self.owner(port, isolated.len())
             .is_some_and(|k| group(k) != group(j))
     }
 
     /// The node whose process owns local UDP port `port`: the one that also owns a listen
-    /// port. Unknown owners are looked up again after a second.
+    /// port. Unknown owners are looked up again after a second, known ones after ten (a
+    /// restarted node's port may go to another node).
     fn owner(&self, port: u16, n: usize) -> Option<usize> {
         if let Some((node, at)) = self.owners.lock().unwrap().get(&port) {
-            if node.is_some() || at.elapsed() < Duration::from_secs(1) {
+            if at.elapsed() < Duration::from_secs(if node.is_some() { 10 } else { 1 }) {
                 return *node;
             }
         }

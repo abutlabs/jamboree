@@ -190,8 +190,7 @@ async fn run_app(
             .map(|(id, (label, cmd, container))| Node::spawn(id, label, &log_dir, cmd, container))
             .collect::<Result<Vec<Node>>>()?;
 
-        let mut app = AppState::new(nodes.len(), cli.search);
-        app.net = net;
+        let app = AppState::new(nodes.len(), cli.search);
         (nodes, app)
     };
 
@@ -201,10 +200,10 @@ async fn run_app(
         terminal.draw(|f| {
             match view_mode {
                 ViewMode::Grid => {
-                    grid::render(f, &nodes, focused, &app);
+                    grid::render(f, &nodes, focused, &app, net.as_ref());
                 }
                 ViewMode::Focused(i) => {
-                    focused::render(f, &nodes[i], &app);
+                    focused::render(f, &nodes[i], &app, net.as_ref());
                 }
             }
             // Render help overlay on top if active
@@ -216,7 +215,14 @@ async fn run_app(
         if poll(Duration::from_millis(50))? {
             match read()? {
                 Event::Key(k) => {
-                    match handle_key_event(k.code, k.modifiers, &mut app, &mut focused, &mut nodes) {
+                    match handle_key_event(
+                        k.code,
+                        k.modifiers,
+                        &mut app,
+                        &mut focused,
+                        &mut nodes,
+                        net.as_ref(),
+                    ) {
                         Action::Quit => {
                             node::stop_all(&nodes, Duration::from_secs(3));
                             // Cleanup and exit (process::exit terminates immediately, so guard won't drop)
@@ -237,7 +243,4 @@ async fn run_app(
             }
         }
     }
-
-    // Unreachable - 'q' uses process::exit(0) which terminates immediately
-    // Terminal cleanup happens automatically on process exit
 }

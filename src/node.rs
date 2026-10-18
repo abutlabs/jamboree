@@ -84,13 +84,6 @@ impl Node {
         Ok(())
     }
 
-    /// Kill the node and run its command again; the other nodes keep running
-    pub fn restart(&mut self) -> Result<()> {
-        stop_all(std::slice::from_ref(self), Duration::from_secs(3));
-        self.stopped.store(false, Ordering::Relaxed);
-        self.start()
-    }
-
     /// Copies the node's output to its log and pane; reaps the shell once the output ends.
     fn start_reader_task(&self, mut log_file: File, mut child: Box<dyn Child + Send + Sync>) {
         let id = self.id;
@@ -101,8 +94,13 @@ impl Node {
             Ok(r) => r,
             Err(_) => {
                 let crash_msg = format!("\n[Node {} failed to create reader]\n", id);
-                let mut b = buffer.lock().unwrap();
-                b.push_str(&crash_msg);
+                append(
+                    &crash_msg,
+                    Some(&mut log_file),
+                    &buffer,
+                    &paused_buffer,
+                    &paused,
+                );
                 return;
             }
         };
@@ -111,39 +109,24 @@ impl Node {
             let mut buf = [0u8; 4096];
 
             loop {
-                let n = match reader.read(&mut buf) {
-                    Ok(0) => {
-                        // EOF - node process ended
-                        let crash_msg = format!("\n[Node {} process ended]\n", id);
-                        let mut b = buffer.lock().unwrap();
-                        b.push_str(&crash_msg);
-                        break;
+                let (text, ended) = match reader.read(&mut buf) {
+                    // EOF - node process ended
+                    Ok(0) => (format!("\n[Node {} process ended]\n", id), true),
+                    // Error reading - node may have crashed
+                    Err(_) => (
+                        format!("\n[Node {id} connection error - process may have crashed]\n"),
+                        true,
+                    ),
+                    // Strip ANSI codes for both log file and UI (clean text in logs, no escape codes)
+                    Ok(n) => {
+                        let text = String::from_utf8_lossy(&strip(&buf[..n])).replace('\r', "");
+                        (text, false)
                     }
-                    Err(_) => {
-                        // Error reading - node may have crashed
-                        let crash_msg = format!(
-                            "\n[Node {} connection error - process may have crashed]\n",
-                            id
-                        );
-                        let mut b = buffer.lock().unwrap();
-                        b.push_str(&crash_msg);
-                        break;
-                    }
-                    Ok(n) => n,
                 };
-
-                let text = String::from_utf8_lossy(&buf[..n]);
-
-                // Strip ANSI codes for both log file and UI (clean text in logs, no escape codes)
-                let clean_text = String::from_utf8_lossy(&strip(text.as_bytes())).replace('\r', "");
-
-                append(
-                    &clean_text,
-                    Some(&mut log_file),
-                    &buffer,
-                    &paused_buffer,
-                    &paused,
-                );
+                append(&text, Some(&mut log_file), &buffer, &paused_buffer, &paused);
+                if ended {
+                    break;
+                }
             }
             // Reap the shell, so a zombie does not count as alive in `signal("0")`
             let _ = child.wait();
@@ -152,17 +135,18 @@ impl Node {
 
     /// Write a jam-ui marker line into this node's log and pane, e.g. when a fault starts.
     pub fn mark(&self, text: &str) {
-        let line = format!(
-            "\n=== jam-ui {} {} ===\n",
-            chrono::Local::now().format("%H:%M:%S%.3f"),
-            text
-        );
+        let time = chrono::Local::now().format("%H:%M:%S%.3f");
+        self.note(&format!("\n=== jam-ui {time} {text} ===\n"));
+    }
+
+    /// Append a jam-ui line to this node's log and pane
+    fn note(&self, line: &str) {
         let mut log_file = self
             .log_path
             .as_ref()
             .and_then(|p| OpenOptions::new().append(true).open(p).ok());
         append(
-            &line,
+            line,
             log_file.as_mut(),
             &self.buffer,
             &self.paused_buffer,
@@ -172,21 +156,6 @@ impl Node {
 
     pub fn is_stopped(&self) -> bool {
         self.stopped.load(Ordering::Relaxed)
-    }
-
-    /// SIGSTOP the node, or SIGCONT it if it is stopped (`docker pause`/`unpause` for a
-    /// container, which SIGSTOP cannot reach). Returns whether it is now stopped, or None if
-    /// the node is not running.
-    pub fn toggle_stopped(&self) -> Option<bool> {
-        let stop = !self.stopped.load(Ordering::Relaxed);
-        let done = match &self.container {
-            Some(name) => docker(&[if stop { "pause" } else { "unpause" }, name]),
-            None => self.signal(if stop { "STOP" } else { "CONT" }),
-        };
-        done.then(|| {
-            self.stopped.store(stop, Ordering::Relaxed);
-            stop
-        })
     }
 
     pub fn resize_pty_if_needed(&self, new_size: PtySize) {
@@ -290,19 +259,52 @@ impl Node {
     pub fn shutdown(&self) {
         self.signal("TERM");
 
-        // Add shutdown message to buffer
-        let shutdown_msg = format!("\n[Node {} shutdown by user]\n", self.id);
-        let mut b = self.buffer.lock().unwrap();
-        b.push_str(&shutdown_msg);
+        // Add shutdown message to log and buffer
+        self.note(&format!("\n[Node {} shutdown by user]\n", self.id));
     }
 }
 
-/// TERM every node, give them `grace` to exit, then KILL what is left. A container is
-/// unpaused first, and removed at the end: KILL stops only the `docker run` client.
+/// Write a jam-ui marker line into every node's log and pane
+pub fn mark_all(nodes: &[Node], text: &str) {
+    nodes.iter().for_each(|n| n.mark(text));
+}
+
+/// SIGSTOP node i, or SIGCONT it (`docker pause`/`unpause` for a container, which SIGSTOP
+/// cannot reach), and mark it in every log
+pub fn set_stopped(nodes: &[Node], i: usize, on: bool) {
+    let node = &nodes[i];
+    let done = match &node.container {
+        Some(name) => docker(&[if on { "pause" } else { "unpause" }, name]),
+        None => node.signal(if on { "STOP" } else { "CONT" }),
+    };
+    if !done {
+        return node.mark("stop failed: the node is not running");
+    }
+    node.stopped.store(on, Ordering::Relaxed);
+    let what = if on { "stopped" } else { "continued" };
+    mark_all(nodes, &format!("{} {} {}", node.label, node.id, what));
+}
+
+/// Kill node i and run its command again, and mark it in every log; the other nodes keep
+/// running
+pub fn restart(nodes: &mut [Node], i: usize) {
+    stop_all(&nodes[i..=i], Duration::from_secs(3));
+    match nodes[i].start() {
+        Ok(()) => mark_all(nodes, &format!("{} {} restarted", nodes[i].label, i)),
+        Err(e) => nodes[i].mark(&format!("restart failed: {e:#}")),
+    }
+}
+
+/// TERM every node, give them `grace` to exit, then KILL what is left. A stopped node is
+/// continued first, and a container removed at the end: KILL stops only the `docker run`
+/// client.
 pub fn stop_all(nodes: &[Node], grace: Duration) {
     for node in nodes {
-        if let (Some(name), true) = (&node.container, node.is_stopped()) {
-            docker(&["unpause", name]);
+        if node.stopped.swap(false, Ordering::Relaxed) {
+            match &node.container {
+                Some(name) => docker(&["unpause", name]),
+                None => node.signal("CONT"),
+            };
         }
         node.shutdown();
     }

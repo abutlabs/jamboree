@@ -1,6 +1,7 @@
 use crate::AppState;
 use crate::ViewMode;
-use crate::node::Node;
+use crate::net::Net;
+use crate::node::{self, Node};
 use crossterm::event::{KeyCode, KeyModifiers, MouseEventKind};
 
 pub enum Action {
@@ -15,6 +16,7 @@ pub fn handle_key_event(
     app: &mut AppState,
     focused: &mut usize,
     nodes: &mut [Node],
+    net: Option<&Net>,
 ) -> Action {
     // If help is showing, any key closes it
     if app.show_help {
@@ -53,6 +55,19 @@ pub fn handle_key_event(
 
     // Check if scrolling is allowed (paused or log viewer mode)
     let can_scroll = app.paused || app.log_viewer_mode;
+    let ctrl = modifiers.contains(KeyModifiers::CONTROL);
+
+    // Vi scroll keys auto-pause first
+    let vi_scroll = match key {
+        KeyCode::Char('g') => !ctrl && app.last_key == Some('g'),
+        KeyCode::Char('G' | 'j' | 'k') => true,
+        KeyCode::Char('d' | 'u' | 'f' | 'b') => ctrl,
+        KeyCode::Char('n' | 'N') => app.highlight.is_some(),
+        _ => false,
+    };
+    if vi_scroll && !can_scroll {
+        app.toggle_pause(nodes);
+    }
 
     // Main key handling
     let action = match key {
@@ -76,16 +91,13 @@ pub fn handle_key_event(
         }
 
         // Grep toggle with Ctrl+G - always available
-        KeyCode::Char('g') if modifiers.contains(KeyModifiers::CONTROL) => {
+        KeyCode::Char('g') if ctrl => {
             app.toggle_grep_mode();
             Action::Continue
         }
 
         // Vi: gg - go to top (second g after first g)
         KeyCode::Char('g') if app.last_key == Some('g') => {
-            if !can_scroll && !app.log_viewer_mode {
-                app.toggle_pause(nodes); // Auto-pause when trying to scroll
-            }
             app.scroll_to_top(*focused);
             Action::Continue
         }
@@ -98,63 +110,42 @@ pub fn handle_key_event(
 
         // Vi: G - go to bottom
         KeyCode::Char('G') => {
-            if !can_scroll && !app.log_viewer_mode {
-                app.toggle_pause(nodes);
-            }
             app.scroll_to_bottom(*focused);
             Action::Continue
         }
 
         // Vi: j - scroll down one line
         KeyCode::Char('j') => {
-            if !can_scroll && !app.log_viewer_mode {
-                app.toggle_pause(nodes);
-            }
             app.scroll_delta(*focused, 1);
             Action::Continue
         }
 
         // Vi: k - scroll up one line
         KeyCode::Char('k') => {
-            if !can_scroll && !app.log_viewer_mode {
-                app.toggle_pause(nodes);
-            }
             app.scroll_delta(*focused, -1);
             Action::Continue
         }
 
         // Vi: Ctrl+d - scroll down half page
-        KeyCode::Char('d') if modifiers.contains(KeyModifiers::CONTROL) => {
-            if !can_scroll && !app.log_viewer_mode {
-                app.toggle_pause(nodes);
-            }
+        KeyCode::Char('d') if ctrl => {
             app.scroll_half_page(*focused, true);
             Action::Continue
         }
 
         // Vi: Ctrl+u - scroll up half page
-        KeyCode::Char('u') if modifiers.contains(KeyModifiers::CONTROL) => {
-            if !can_scroll && !app.log_viewer_mode {
-                app.toggle_pause(nodes);
-            }
+        KeyCode::Char('u') if ctrl => {
             app.scroll_half_page(*focused, false);
             Action::Continue
         }
 
         // Vi: Ctrl+f - scroll down full page
-        KeyCode::Char('f') if modifiers.contains(KeyModifiers::CONTROL) => {
-            if !can_scroll && !app.log_viewer_mode {
-                app.toggle_pause(nodes);
-            }
+        KeyCode::Char('f') if ctrl => {
             app.scroll_full_page(*focused, true);
             Action::Continue
         }
 
         // Vi: Ctrl+b - scroll up full page
-        KeyCode::Char('b') if modifiers.contains(KeyModifiers::CONTROL) => {
-            if !can_scroll && !app.log_viewer_mode {
-                app.toggle_pause(nodes);
-            }
+        KeyCode::Char('b') if ctrl => {
             app.scroll_full_page(*focused, false);
             Action::Continue
         }
@@ -162,9 +153,6 @@ pub fn handle_key_event(
         // Vi: n - jump to next search match
         KeyCode::Char('n') => {
             if app.highlight.is_some() {
-                if !can_scroll && !app.log_viewer_mode {
-                    app.toggle_pause(nodes);
-                }
                 let text = nodes[*focused].get_text_tail(5_000_000);
                 let filtered_text = app.filter_text(&text);
                 app.jump_to_next_match(*focused, &filtered_text);
@@ -175,9 +163,6 @@ pub fn handle_key_event(
         // Vi: N - jump to previous search match
         KeyCode::Char('N') => {
             if app.highlight.is_some() {
-                if !can_scroll && !app.log_viewer_mode {
-                    app.toggle_pause(nodes);
-                }
                 let text = nodes[*focused].get_text_tail(5_000_000);
                 let filtered_text = app.filter_text(&text);
                 app.jump_to_prev_match(*focused, &filtered_text);
@@ -211,60 +196,38 @@ pub fn handle_key_event(
 
         // Stop/continue the focused node (SIGSTOP/SIGCONT), marked in every log
         KeyCode::Char('s') if !app.log_viewer_mode => {
-            let node = &nodes[*focused];
-            match node.toggle_stopped() {
-                Some(stopped) => {
-                    let what = if stopped { "stopped" } else { "continued" };
-                    for n in nodes.iter() {
-                        n.mark(&format!("{} {} {}", node.label, node.id, what));
-                    }
-                }
-                None => node.mark("stop failed: the node is not running"),
-            }
+            node::set_stopped(nodes, *focused, !nodes[*focused].is_stopped());
             Action::Continue
         }
 
         // Cut the focused node off from all others, or heal it (every node behind jam-ui's relay)
-        KeyCode::Char('i') if !app.log_viewer_mode => {
-            let node = &nodes[*focused];
-            match app.net.as_ref().map(|net| net.toggle_isolated(*focused)) {
-                Some(Ok(isolated)) => {
-                    let what = if isolated { "isolated" } else { "healed" };
-                    for n in nodes.iter() {
-                        n.mark(&format!("{} {} {}", node.label, node.id, what));
-                    }
-                }
-                Some(Err(why)) => node.mark(&why),
-                None => node.mark("isolate works only on running nodes"),
+        KeyCode::Char('i') => {
+            if let Some(net) = net {
+                net.set_isolated(nodes, *focused, !net.is_isolated(*focused));
             }
             Action::Continue
         }
 
         // Split the network at the focused node (nodes before it | it and after), or heal it
-        KeyCode::Char('p') if !app.log_viewer_mode => {
+        KeyCode::Char('p') => {
             let at = *focused;
-            let what = match app.net.as_ref() {
-                None => Err("split works only on running nodes".to_string()),
-                Some(_) if at == 0 => Err("to split, focus the first node of side B".to_string()),
-                Some(net) => net.toggle_split(at).map(|split| match split {
-                    true => format!("split 0-{} | {}-{}", at - 1, at, nodes.len() - 1),
-                    false => "split healed".to_string(),
-                }),
-            };
-            match what {
-                Ok(what) => nodes.iter().for_each(|n| n.mark(&what)),
-                Err(why) => nodes[at].mark(&why),
+            let split = net.is_some_and(|net| net.split_side(at).is_none());
+            match net {
+                Some(_) if split && at == 0 => {
+                    nodes[0].mark("to split, focus the first node of side B")
+                }
+                Some(net) => {
+                    let sides = (0..nodes.len()).map(|k| usize::from(split && k >= at));
+                    net.set_split(nodes, sides.collect())
+                }
+                None => {}
             }
             Action::Continue
         }
 
         // Restart the focused node: kill it and run its command again
         KeyCode::Char('r') if !app.log_viewer_mode => {
-            let what = format!("{} {} restarted", nodes[*focused].label, *focused);
-            nodes.iter().for_each(|n| n.mark(&what));
-            if let Err(e) = nodes[*focused].restart() {
-                nodes[*focused].mark(&format!("restart failed: {e:#}"));
-            }
+            node::restart(nodes, *focused);
             Action::Continue
         }
 
@@ -308,12 +271,6 @@ pub fn handle_key_event(
     // Clear last_key after processing (except when we're waiting for 'gg')
     if key != KeyCode::Char('g') || app.last_key == Some('g') {
         app.last_key = None;
-    }
-
-    // Handle 'g' timeout - if last_key is 'g' and we processed something else, toggle grep
-    if app.last_key == Some('g') {
-        // This case is handled above, but if we reach here with 'g' still set, 
-        // it means we're waiting for the next key
     }
 
     action
