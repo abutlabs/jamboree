@@ -19,9 +19,7 @@ jamboree --nodes 6 --cmd './my-jam-node <flags for node {i}>'
 
 Linux and macOS, no root. From a clone, `cargo run -- <args>` works the same.
 
-Built while developing [Jamixir](https://jamixir.org), where it found five bugs in restarts,
-reorgs and connection handling ([#662](https://github.com/jamixir/jamixir/issues/662), [#663](https://github.com/jamixir/jamixir/issues/663), [#664](https://github.com/jamixir/jamixir/issues/664),
-[#665](https://github.com/jamixir/jamixir/issues/665), [#666](https://github.com/jamixir/jamixir/issues/666)).
+Built while developing [Jamixir](https://jamixir.org).
 
 ## Start a network
 
