@@ -295,6 +295,17 @@ pub fn handle_mouse_event(mouse: MouseEventKind, app: &mut AppState, focused: us
     Action::Continue
 }
 
+/// A time like 90s or 2m
+pub fn parse_duration(w: &str) -> Result<Duration, String> {
+    let secs = match w.char_indices().last() {
+        Some((at, 's')) => w[..at].parse().ok(),
+        Some((at, 'm')) => w[..at].parse().ok().map(|m: u64| m * 60),
+        _ => None,
+    };
+    secs.map(Duration::from_secs)
+        .ok_or(format!("'{w}' is not a time like 90s or 2m"))
+}
+
 /// A --fault action; split lists the nodes of each side
 #[derive(Clone, Debug)]
 pub enum Fault {
@@ -309,15 +320,10 @@ impl Fault {
     /// Parse `[<time>] <action>`, e.g. `60s split 0,1,2/3,4,5`; no time means at the start
     pub fn parse(s: &str) -> Result<(Duration, Fault), String> {
         let mut words: Vec<&str> = s.split_whitespace().collect();
-        let time = |w: &str| match w.char_indices().last() {
-            Some((at, 's')) => w[..at].parse().ok(),
-            Some((at, 'm')) => w[..at].parse().ok().map(|m: u64| m * 60),
-            _ => None,
-        };
-        let at = match words.first().and_then(|w| time(w)) {
-            Some(secs) => {
+        let at = match words.first().and_then(|w| parse_duration(w).ok()) {
+            Some(at) => {
                 words.remove(0);
-                Duration::from_secs(secs)
+                at
             }
             None => Duration::ZERO,
         };

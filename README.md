@@ -75,6 +75,34 @@ jamboree --nodes 6 --cmd '...' \
 Actions: `stop N`, `isolate N`, `split A/B`, `restart N`, and `heal` (continue, un-isolate
 and unsplit everything). Times look like `90s` or `2m`; no time means at the start.
 
+## Run in CI
+
+`--headless DURATION` runs the same network without the UI, then stops the nodes. With
+`--head`, it checks that every node ended on the same head and exits 1 if not:
+
+```sh
+jamboree --nodes 6 --cmd 'cd ~/src/jamixir && ./node.sh {i}' \
+  --fault '60s split 0,1,2,3/4,5' --fault '120s heal' \
+  --headless 3m --head 'State Updated successfully\. H: (0x[0-9a-f]{64})'
+```
+
+The head is what the regex's first group captures in each node's last matching log line.
+After DURATION, jamboree waits up to `--timeout` (default 60s) for all nodes to agree, then
+prints either the head or which nodes are on which. Stopped nodes are left out. For a mixed
+network, give each client its own regex with a label: `--head 'polkajam=Imported (0x[0-9a-f]+)'`.
+Clients shorten hashes differently, so there capture something they print alike, such as the slot.
+
+<details>
+<summary>Head regexes for some clients</summary>
+
+| Client | `--head` |
+| --- | --- |
+| Jamixir | `State Updated successfully\. H: (0x[0-9a-f]{64})` |
+| PolkaJam | `Imported (0x[0-9a-f]+)` |
+| JAM DUNA | `(?:Imported\|Authored) Block".* h=(\S+)` |
+| PBnJam | `"blockHash":"(0x[0-9a-f]+)` |
+</details>
+
 ## Recipes
 
 Tried with PolkaJam, Typeberry, SpaceJam and Jamixir dev networks.
