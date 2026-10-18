@@ -16,3 +16,6 @@
   client outlives jam-ui.
 - `s` stops/continues the focused node (SIGSTOP/SIGCONT) and writes a marker line into
   every node's log. `Space` is now called freeze, since the nodes keep running.
+- `i` cuts the focused node off from the others and heals it, on Linux and macOS without
+  root and without changing the node command: jam-ui shares each node's genesis port and
+  relays its traffic. `--move-ports` is the fallback for clients whose port cannot be shared.

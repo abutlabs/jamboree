@@ -100,7 +100,7 @@ pub fn render(f: &mut Frame, node: &Node, app: &AppState) {
                     "{} {} (ZOOM){}{}",
                     node.label,
                     node.id,
-                    if node.is_stopped() { " [STOPPED]" } else { "" },
+                    super::grid::fault_tags(app, node),
                     if paused { " [FROZEN]" } else { "" }
                 ))
                 .borders(Borders::ALL)

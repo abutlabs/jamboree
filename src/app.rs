@@ -17,6 +17,7 @@ pub struct AppState {
     pub grep_mode: bool, // true to filter lines (grep), false to only highlight
     pub show_help: bool, // true to display help overlay
     pub last_key: Option<char>, // Track last key for vi commands like 'gg'
+    pub net: Option<crate::net::Net>, // relay in front of nodes that listen on $PORT
 }
 
 impl AppState {
@@ -109,6 +110,7 @@ impl AppState {
             grep_mode: false,
             show_help: false,
             last_key: None,
+            net: None,
         }
     }
 
@@ -133,6 +135,7 @@ impl AppState {
             grep_mode: false,
             show_help: false,
             last_key: None,
+            net: None,
         }
     }
 

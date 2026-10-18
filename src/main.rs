@@ -1,12 +1,14 @@
 mod app;
 mod cli;
 mod event;
+mod net;
 mod node;
 mod ui;
 mod utils;
 
 use crate::app::AppState;
 use crate::cli::Cli;
+use crate::net::Net;
 use crate::node::Node;
 use anyhow::Result;
 use chrono::Local;
@@ -26,9 +28,8 @@ use crate::ui::focused;
 use crate::ui::help;
 use ui::grid;
 
-/// One labelled `sh -c` command per node, with `{i}` replaced by the node index:
-/// a single --cmd is the template for every node, several --cmd give one node each
-fn node_commands(cmds: &[String], nodes: Option<usize>) -> Result<Vec<(String, CommandBuilder)>> {
+/// Number of nodes: a single --cmd is the template for every node, several --cmd give one node each
+fn node_count(cmds: &[String], nodes: Option<usize>) -> Result<usize> {
     let count = match (cmds.len(), nodes) {
         (1, n) => n.unwrap_or(6),
         (len, None) => len,
@@ -36,16 +37,31 @@ fn node_commands(cmds: &[String], nodes: Option<usize>) -> Result<Vec<(String, C
         (len, Some(n)) => anyhow::bail!("--nodes {} does not match the {} --cmd flags", n, len),
     };
     anyhow::ensure!(count > 0, "--nodes must be at least 1");
+    Ok(count)
+}
+
+/// One labelled `sh -c` command per node, with `{i}` replaced by the node index and `{port}` by
+/// the port it listens on, also in `$PORT` when the ports were moved
+fn node_commands(
+    cmds: &[String],
+    ports: &[u16],
+    moved: bool,
+) -> Result<Vec<(String, CommandBuilder)>> {
     let cwd = std::env::current_dir()?;
-    Ok((0..count)
+    (0..ports.len())
         .map(|id| {
             let (label, cmd) = utils::split_label(&cmds[if cmds.len() == 1 { 0 } else { id }]);
+            let cmd = utils::node_command(cmd, id)
+                .replace("{port}", &ports[id].to_string());
             let mut c = CommandBuilder::new("sh");
-            c.args(["-c", &utils::node_command(cmd, id)]);
+            c.args(["-c", &cmd]);
+            if moved {
+                c.env("PORT", ports[id].to_string());
+            }
             c.cwd(&cwd);
-            (label.unwrap_or("Node").to_string(), c)
+            Ok((label.unwrap_or("Node").to_string(), c))
         })
-        .collect())
+        .collect()
 }
 
 pub enum ViewMode {
@@ -68,25 +84,35 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // Resolve the node commands before terminal setup (so errors print normally)
-    let commands = match &cli.log_folder {
-        None => match node_commands(&cli.cmd, cli.nodes) {
-            Ok(commands) => commands,
-            Err(e) => {
-                eprintln!("Error: {}", e);
-                std::process::exit(1);
-            }
-        },
-        Some(_) => Vec::new(),
+    let setup = || -> Result<_> {
+        if cli.log_folder.is_some() {
+            return Ok((Vec::new(), None));
+        }
+        let count = node_count(&cli.cmd, cli.nodes)?;
+        let net = Net::start(cli.genesis_port, count, cli.move_ports, cli.listen_port)?;
+        let commands = node_commands(&cli.cmd, net.listen_ports(), cli.move_ports)?;
+        Ok((commands, Some(net)))
+    };
+    let (commands, net) = match setup() {
+        Ok(setup) => setup,
+        Err(e) => {
+            eprintln!("Error: {:#}", e);
+            std::process::exit(1);
+        }
     };
 
-    if let Err(e) = run_app(cli, commands).await {
+    if let Err(e) = run_app(cli, commands, net).await {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     }
     Ok(())
 }
 
-async fn run_app(cli: Cli, commands: Vec<(String, CommandBuilder)>) -> Result<()> {
+async fn run_app(
+    cli: Cli,
+    commands: Vec<(String, CommandBuilder)>,
+    net: Option<Net>,
+) -> Result<()> {
     enable_raw_mode()?;
     execute!(stdout(), EnterAlternateScreen, Hide)?;
     let _guard = TerminalGuard;
@@ -125,7 +151,8 @@ async fn run_app(cli: Cli, commands: Vec<(String, CommandBuilder)>) -> Result<()
             .map(|(id, (label, cmd))| Node::spawn(id, label, &log_dir, cmd))
             .collect::<Result<Vec<Node>>>()?;
 
-        let app = AppState::new(nodes.len(), cli.search);
+        let mut app = AppState::new(nodes.len(), cli.search);
+        app.net = net;
         (nodes, app)
     };
 

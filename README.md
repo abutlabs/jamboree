@@ -21,7 +21,8 @@ This puts `jam-ui` in `~/.cargo/bin`. From a clone, `cargo run -- <args>` works 
 ## Usage
 
 `--cmd` is run once per node with `sh -c`, from the current directory. Every `{i}` in it
-is replaced by the node index (0, 1, 2, ...). `--nodes` sets how many nodes to start
+is replaced by the node index (0, 1, 2, ...), and every `{port}` by the port the node
+listens on (its genesis port unless `--move-ports`). `--nodes` sets how many nodes to start
 (default 6). Each line a node prints to stdout/stderr shows up in its pane. Without
 `--cmd` or `--logs`, jam-ui prints its usage.
 
@@ -70,6 +71,26 @@ keys and bootnode flags differ per client; the PolkaJam part runs as written.
 
 Tried with PolkaJam, Typeberry, SpaceJam and Jamixir dev networks.
 
+### Network faults
+
+`i` cuts the focused node off from all the others and heals it again: packets are dropped
+silently in both directions, like a broken link, and every log gets a marker line. It works
+on Linux and macOS without root and without changing the node command:
+
+```sh
+jam-ui --nodes 6 --cmd 'cd ~/src/jamixir && ./node.sh {i}'
+```
+
+Peers dial each node on its genesis port (`--genesis-port`, default 40000, so node i is on
+40000+i). jam-ui shares that port with the node: it binds the more specific 127.0.0.1 on the
+same port, so the OS hands it the peers' packets, relays them to the node and drops them
+while it is cut off. The node keeps listening where its genesis says.
+
+Some clients' ports cannot be shared (on Linux the client must set `SO_REUSEPORT`; on macOS
+it must listen on `::`). Then `i` says so, and `--move-ports` is the fallback: each node is
+told to listen on another port, given as `$PORT` and `{port}`, which you pass to the client's
+listen-port flag (`--listen-port P` fixes them to `P+i`), and jam-ui takes the genesis ports.
+
 ### Search and log viewer
 
 ```bash
@@ -98,6 +119,7 @@ jam-ui --logs logs/20260111_161505 --search "error,warning"
 - **`Space`** - Freeze/unfreeze all panes (enables scrolling; the nodes keep running)
 - **`S`** - Stop/continue the focused node (SIGSTOP/SIGCONT to its process group). The
   node stays connected but goes silent, then wakes up behind. Every log gets a marker line
+- **`I`** - Isolate/heal the focused node (see Network faults)
 - **`X`** - Shutdown all nodes: TERM, then KILL after 3 s (auto-freezes, allows viewing logs)
 - **`Enter`** - Zoom into focused node
 - **`Esc`** - Return to grid view
