@@ -19,3 +19,5 @@
 - `i` cuts the focused node off from the others and heals it, on Linux and macOS without
   root and without changing the node command: jam-ui shares each node's genesis port and
   relays its traffic. `--move-ports` is the fallback for clients whose port cannot be shared.
+- `p` splits the network at the focused node and heals it; `r` restarts the focused node.
+- Each run saves its command line to `logs/<run>/cmd.txt`.

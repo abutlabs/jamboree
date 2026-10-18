@@ -144,9 +144,14 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState) {
 /// Pane title tags for the faults currently applied to a node
 pub fn fault_tags(app: &AppState, node: &Node) -> String {
     let isolated = app.net.as_ref().is_some_and(|net| net.is_isolated(node.id));
-    [(node.is_stopped(), " [STOPPED]"), (isolated, " [ISOLATED]")]
+    let split = app.net.as_ref().and_then(|net| net.split_side(node.id));
+    let mut tags: String = [(node.is_stopped(), " [STOPPED]"), (isolated, " [ISOLATED]")]
         .iter()
         .filter(|(on, _)| *on)
         .map(|(_, tag)| *tag)
-        .collect()
+        .collect();
+    if let Some(side) = split {
+        tags += &format!(" [SPLIT {side}]");
+    }
+    tags
 }

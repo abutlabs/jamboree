@@ -27,55 +27,59 @@ pub struct Node {
     /// Pid of the `sh -c` that runs the node; also its process group id
     pid: Option<u32>,
     log_path: Option<PathBuf>,
+    /// Command that starts the node, kept for restarts
+    cmd: Option<CommandBuilder>,
     /// The node's process group is SIGSTOPped
     stopped: AtomicBool,
 }
 
 impl Node {
     pub fn spawn(id: usize, label: String, log_dir: &PathBuf, cmd: CommandBuilder) -> Result<Self> {
-        let pty_system = NativePtySystem::default();
-
-        let pair = pty_system.openpty(PtySize {
-            rows: 24,
-            cols: 80,
-            pixel_width: 0,
-            pixel_height: 0,
-        })?;
-        let master = pair.master;
-
-        let buffer = Arc::new(Mutex::new(String::new()));
-        let paused_buffer = Arc::new(Mutex::new(String::new()));
-        let current_size = Arc::new(Mutex::new(PtySize {
-            rows: 24,
-            cols: 80,
-            pixel_width: 0,
-            pixel_height: 0,
-        }));
-        let paused = Arc::new(Mutex::new(false));
-        let child = pair.slave.spawn_command(cmd)?;
-        let log_path = log_dir.join(format!("node_{}.log", id));
-
-        let node = Node {
+        let mut node = Node {
             id,
             label,
-            master: Some(master),
-            buffer,
-            paused_buffer,
-            current_size,
-            paused,
-            pid: child.process_id(),
-            log_path: Some(log_path.clone()),
+            master: None,
+            buffer: Arc::new(Mutex::new(String::new())),
+            paused_buffer: Arc::new(Mutex::new(String::new())),
+            current_size: Arc::new(Mutex::new(PtySize {
+                rows: 24,
+                cols: 80,
+                pixel_width: 0,
+                pixel_height: 0,
+            })),
+            paused: Arc::new(Mutex::new(false)),
+            pid: None,
+            log_path: Some(log_dir.join(format!("node_{}.log", id))),
+            cmd: Some(cmd),
             stopped: AtomicBool::new(false),
         };
+        node.start()?;
+        Ok(node)
+    }
 
-        // Start the reader task
+    /// Run the node's command in a new pty, appending to its log and pane
+    fn start(&mut self) -> Result<()> {
+        let (Some(cmd), Some(log_path)) = (&self.cmd, &self.log_path) else {
+            return Ok(());
+        };
+        let size = *self.current_size.lock().unwrap();
+        let pair = NativePtySystem::default().openpty(size)?;
+        let child = pair.slave.spawn_command(cmd.clone())?;
         let log_file = OpenOptions::new()
             .create(true)
             .append(true)
             .open(log_path)?;
-        node.start_reader_task(log_file, child);
+        self.pid = child.process_id();
+        self.master = Some(pair.master);
+        self.start_reader_task(log_file, child);
+        Ok(())
+    }
 
-        Ok(node)
+    /// Kill the node and run its command again; the other nodes keep running
+    pub fn restart(&mut self) -> Result<()> {
+        stop_all(std::slice::from_ref(self), Duration::from_secs(3));
+        self.stopped.store(false, Ordering::Relaxed);
+        self.start()
     }
 
     /// Copies the node's output to its log and pane; reaps the shell once the output ends.
@@ -202,6 +206,7 @@ impl Node {
             paused,
             pid: None,
             log_path: None,
+            cmd: None,
             stopped: AtomicBool::new(false),
         };
 

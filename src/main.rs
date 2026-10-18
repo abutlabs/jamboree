@@ -51,8 +51,7 @@ fn node_commands(
     (0..ports.len())
         .map(|id| {
             let (label, cmd) = utils::split_label(&cmds[if cmds.len() == 1 { 0 } else { id }]);
-            let cmd = utils::node_command(cmd, id)
-                .replace("{port}", &ports[id].to_string());
+            let cmd = utils::node_command(cmd, id).replace("{port}", &ports[id].to_string());
             let mut c = CommandBuilder::new("sh");
             c.args(["-c", &cmd]);
             if moved {
@@ -122,7 +121,7 @@ async fn run_app(
     let backend = CrosstermBackend::new(stdout());
     let mut terminal = Terminal::new(backend)?;
 
-    let (nodes, mut app) = if let Some(log_folder) = &cli.log_folder {
+    let (mut nodes, mut app) = if let Some(log_folder) = &cli.log_folder {
         // Log viewer mode: load from log files
         let log_dir = PathBuf::from(log_folder);
         let mut nodes = Vec::new();
@@ -144,6 +143,18 @@ async fn run_app(
         let datetime = Local::now().format("%Y%m%d_%H%M%S").to_string();
         let log_dir = PathBuf::from("logs").join(datetime);
         std::fs::create_dir_all(&log_dir)?;
+        // The command line of this run, to rerun it or attach it to a bug report
+        let quote = |a: String| {
+            let plain = a
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || "-_./=:,".contains(c));
+            match plain {
+                true => a,
+                false => format!("'{}'", a.replace('\'', "'\\''")),
+            }
+        };
+        let quoted: Vec<String> = std::env::args().map(quote).collect();
+        std::fs::write(log_dir.join("cmd.txt"), quoted.join(" ") + "\n")?;
 
         let nodes = commands
             .into_iter()
@@ -177,7 +188,7 @@ async fn run_app(
         if poll(Duration::from_millis(50))? {
             match read()? {
                 Event::Key(k) => {
-                    match handle_key_event(k.code, k.modifiers, &mut app, &mut focused, &nodes) {
+                    match handle_key_event(k.code, k.modifiers, &mut app, &mut focused, &mut nodes) {
                         Action::Quit => {
                             node::stop_all(&nodes, Duration::from_secs(3));
                             // Cleanup and exit (process::exit terminates immediately, so guard won't drop)
