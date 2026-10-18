@@ -134,6 +134,10 @@ async fn main() -> Result<()> {
             fault.check(count).map_err(anyhow::Error::msg)?;
         }
         let mut faults = cli.fault.clone();
+        if let Some(seed) = cli.chaos {
+            let end = cli.headless.unwrap_or(Duration::from_secs(3600));
+            faults.extend(Fault::chaos(seed, count, end));
+        }
         faults.sort_by_key(|(at, _)| *at);
         let labels: Vec<String> = commands.iter().map(|(label, ..)| label.clone()).collect();
         let heads = (cli.head.iter())
@@ -166,9 +170,11 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-/// Create this run's log dir with its command line in cmd.txt, and start the nodes
+/// Create this run's log dir with its command line in cmd.txt and its fault schedule in
+/// faults.txt, and start the nodes
 fn spawn_nodes(
     commands: Vec<(String, CommandBuilder, Option<String>)>,
+    faults: &[(Duration, Fault)],
 ) -> Result<(PathBuf, Vec<Node>)> {
     let datetime = Local::now().format("%Y%m%d_%H%M%S").to_string();
     let log_dir = PathBuf::from("logs").join(datetime);
@@ -185,6 +191,9 @@ fn spawn_nodes(
     };
     let quoted: Vec<String> = std::env::args().map(quote).collect();
     std::fs::write(log_dir.join("cmd.txt"), quoted.join(" ") + "\n")?;
+    if !faults.is_empty() {
+        std::fs::write(log_dir.join("faults.txt"), fault_args(faults) + "\n")?;
+    }
 
     let nodes = commands
         .into_iter()
@@ -192,6 +201,12 @@ fn spawn_nodes(
         .map(|(id, (label, cmd, container))| Node::spawn(id, label, &log_dir, cmd, container))
         .collect::<Result<Vec<Node>>>()?;
     Ok((log_dir, nodes))
+}
+
+/// The fault schedule as --fault arguments, to replay or edit it
+fn fault_args(faults: &[(Duration, Fault)]) -> String {
+    let arg = |(at, fault): &(Duration, Fault)| format!("--fault '{}s {fault}'", at.as_secs());
+    faults.iter().map(arg).collect::<Vec<_>>().join(" ")
 }
 
 /// Apply each --fault when due; one that cuts nodes off first waits, as long as the relay does,
@@ -264,8 +279,11 @@ async fn run_headless(
     heads: Vec<Head>,
     timeout: Duration,
 ) -> Result<i32> {
-    let (log_dir, mut nodes) = spawn_nodes(commands)?;
+    let (log_dir, mut nodes) = spawn_nodes(commands, &faults)?;
     println!("{} nodes, logs in {}", nodes.len(), log_dir.display());
+    if !faults.is_empty() {
+        println!("faults: {}", fault_args(&faults));
+    }
     let interrupted = Arc::new(AtomicBool::new(false));
     let on_ctrl_c = interrupted.clone();
     tokio::spawn(async move {
@@ -375,7 +393,7 @@ async fn run_app(
         (nodes, app)
     } else {
         // Normal mode: spawn nodes
-        let (_, nodes) = spawn_nodes(commands)?;
+        let (_, nodes) = spawn_nodes(commands, &faults)?;
         let app = AppState::new(nodes.len(), cli.search);
         (nodes, app)
     };

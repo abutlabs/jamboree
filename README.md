@@ -75,6 +75,10 @@ jamboree --nodes 6 --cmd '...' \
 Actions: `stop N`, `isolate N`, `split A/B`, `restart N`, and `heal` (continue, un-isolate
 and unsplit everything). Times look like `90s` or `2m`; no time means at the start.
 
+`--chaos SEED` adds a random schedule: every 20-60s a stop, isolate, split or restart, healed
+20-60s later. The same seed and node count give the same schedule, and each run saves it as
+`--fault` arguments in `faults.txt`, ready to replay or trim when a run finds a bug.
+
 ## Run in CI
 
 `--headless DURATION` runs the same network without the UI, then stops the nodes. With
