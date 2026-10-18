@@ -203,9 +203,23 @@ pub fn handle_key_event(
             Action::Continue
         }
 
-        // Pause/Resume
+        // Freeze/unfreeze all panes
         KeyCode::Char(' ') if !app.log_viewer_mode => {
             app.toggle_pause(nodes);
+            Action::Continue
+        }
+
+        // Stop/continue the focused node (SIGSTOP/SIGCONT), marked in every log
+        KeyCode::Char('s') if !app.log_viewer_mode => {
+            let node = &nodes[*focused];
+            let what = if node.toggle_stopped() {
+                "stopped"
+            } else {
+                "continued"
+            };
+            for n in nodes {
+                n.mark(&format!("{} {} {}", node.label, node.id, what));
+            }
             Action::Continue
         }
 

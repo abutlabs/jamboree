@@ -53,7 +53,8 @@ pub fn render(f: &mut Frame) {
 
   CONTROLS
   ─────────────────────────────────────────────────────
-  Space           Pause/Resume all nodes
+  Space           Freeze/unfreeze all panes
+  s               Stop/continue the focused node (SIGSTOP)
   x               Shutdown all nodes
   q               Quit
   ?               Toggle this help
