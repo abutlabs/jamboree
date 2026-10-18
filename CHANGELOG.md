@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Panes show the client's own log colours; saved logs, search and `--head` still use plain text.
+
 ## 0.2.0
 
 - `--headless DURATION` runs without the UI and exits when done; `--head '[label=]REGEX'`

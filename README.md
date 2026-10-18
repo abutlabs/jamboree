@@ -111,7 +111,8 @@ Clients shorten hashes differently, so there capture something they print alike,
 
 ## Recipes
 
-Tried with PolkaJam, Typeberry, SpaceJam and Jamixir dev networks.
+Runs PolkaJam (release binary) and Jamixir networks. Typeberry and SpaceJam dev nodes start
+under jamboree but stop when they author their first block (their published images, Oct 13).
 
 <details>
 <summary>Jamixir</summary>
