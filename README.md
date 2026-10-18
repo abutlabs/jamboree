@@ -14,10 +14,12 @@ the hard bugs show up.
 
 ```sh
 cargo install --git https://github.com/jamixir/jamboree
-jamboree --nodes 6 --cmd './my-jam-node <flags for node {i}>'
+jamboree --nodes 6 --cmd 'cd ~/src/jamixir && ./node.sh {i}'
 ```
 
-Linux and macOS, no root. From a clone, `cargo run -- <args>` works the same.
+That starts six Jamixir nodes. For any other client, put the command that starts one node in
+`--cmd`; jamboree runs it once per node with `{i}` replaced by 0, 1, 2, ... Linux and macOS,
+no root. From a clone, `cargo run -- <args>` works the same.
 
 Built while developing [Jamixir](https://jamixir.org).
 
