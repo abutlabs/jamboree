@@ -1,15 +1,22 @@
 //! Network faults: a UDP relay on each node's genesis port that drops traffic between nodes
-//! that are cut off from each other (an isolated node, or the two sides of a split).
+//! that are cut off from each other (an isolated node, or the two sides of a split), and
+//! delays or loses packets with --delay, --jitter and --loss.
 //! Default: shares the genesis port with the node. --move-ports: the node moves to $PORT.
 
+use crate::cli::Cli;
 use crate::node::{mark_all, Node};
 use anyhow::Result;
 use socket2::{Domain, Socket, Type};
 use std::{
     collections::HashMap,
+    collections::VecDeque,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
     process::Command,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+        mpsc::{self, RecvTimeoutError},
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -36,19 +43,28 @@ struct Shared {
     side: Mutex<Vec<usize>>,
     /// Which node owns a local UDP port, as last looked up
     owners: Mutex<HashMap<u16, (Option<usize>, Instant)>>,
+    /// --delay, --jitter and --loss (percent) on every relayed packet
+    delay: Duration,
+    jitter: Duration,
+    loss: f64,
+    /// Packets held back by --delay, sent when due
+    late: Option<mpsc::Sender<Late>>,
+}
+
+/// A packet held back by --delay, to send at `at`
+struct Late {
+    at: Instant,
+    socket: Arc<UdpSocket>,
+    to: SocketAddr,
+    bytes: Vec<u8>,
 }
 
 impl Net {
-    /// Relay `n` nodes. With `move_ports`, node i listens on `listen_base + i` or a free port.
-    pub fn start(
-        genesis_port: u16,
-        n: usize,
-        move_ports: bool,
-        listen_base: Option<u16>,
-        containers: Vec<Option<String>>,
-    ) -> Result<Self> {
+    /// Relay `n` nodes. With --move-ports, node i listens on --listen-port + i or a free port.
+    pub fn start(cli: &Cli, n: usize, containers: Vec<Option<String>>) -> Result<Self> {
+        let (genesis_port, move_ports) = (cli.genesis_port, cli.move_ports);
         let listen = (0..n)
-            .map(|i| match (move_ports, listen_base) {
+            .map(|i| match (move_ports, cli.listen_port) {
                 (false, _) => Ok(genesis_port + i as u16),
                 (true, Some(base)) => Ok(base + i as u16),
                 (true, None) => Ok(UdpSocket::bind(("127.0.0.1", 0))?.local_addr()?.port()),
@@ -63,6 +79,14 @@ impl Net {
             isolated: Mutex::new(vec![false; n]),
             side: Mutex::new(vec![0; n]),
             owners: Mutex::new(HashMap::new()),
+            delay: cli.delay,
+            jitter: cli.jitter,
+            loss: cli.loss,
+            late: (!cli.delay.is_zero() || !cli.jitter.is_zero()).then(|| {
+                let (tx, rx) = mpsc::channel();
+                thread::spawn(move || send_late(rx));
+                tx
+            }),
         });
         let watcher = shared.clone();
         thread::spawn(move || watcher.relay_listening_nodes());
@@ -223,6 +247,21 @@ impl Shared {
             .is_some_and(|k| group(k) != group(j))
     }
 
+    /// Send a relayed packet, unless --loss drops it, after --delay and --jitter
+    fn send(&self, socket: &Arc<UdpSocket>, bytes: &[u8], to: SocketAddr) {
+        if self.loss > 0.0 && random() * 100.0 < self.loss {
+            return;
+        }
+        let Some(late) = &self.late else {
+            let _ = socket.send_to(bytes, to);
+            return;
+        };
+        let spread = self.jitter.mul_f64(2.0 * random());
+        let at = Instant::now() + self.delay.saturating_sub(self.jitter) + spread;
+        let (socket, bytes) = (socket.clone(), bytes.to_vec());
+        let _ = late.send(Late { at, socket, to, bytes });
+    }
+
     /// The node whose process owns local UDP port `port`: the one that also owns a listen
     /// port. Unknown owners are looked up again after a second, known ones after ten (a
     /// restarted node's port may go to another node).
@@ -266,7 +305,8 @@ fn share_port(port: u16) -> Option<UdpSocket> {
 /// Forward datagrams that arrive for node j to `node`, one upstream socket per sending
 /// address so replies find their way back.
 fn relay(front: UdpSocket, node: SocketAddr, j: usize, shared: Arc<Shared>) {
-    let mut flows: HashMap<SocketAddr, UdpSocket> = HashMap::new();
+    let front = Arc::new(front);
+    let mut flows: HashMap<SocketAddr, Arc<UdpSocket>> = HashMap::new();
     let mut buf = [0u8; 65536];
     while let Ok((len, from)) = front.recv_from(&mut buf) {
         if shared.cut(from.port(), j) {
@@ -276,23 +316,50 @@ fn relay(front: UdpSocket, node: SocketAddr, j: usize, shared: Arc<Shared>) {
             let Ok(up) = UdpSocket::bind(SocketAddr::new(node.ip(), 0)) else {
                 continue;
             };
-            let (up_rx, front_tx, shared) = (
-                up.try_clone().unwrap(),
-                front.try_clone().unwrap(),
-                shared.clone(),
-            );
+            let up = Arc::new(up);
+            let (up_rx, front_tx, shared) = (up.clone(), front.clone(), shared.clone());
             thread::spawn(move || {
                 let mut buf = [0u8; 65536];
                 while let Ok(len) = up_rx.recv(&mut buf) {
                     if !shared.cut(from.port(), j) {
-                        let _ = front_tx.send_to(&buf[..len], from);
+                        shared.send(&front_tx, &buf[..len], from);
                     }
                 }
             });
             flows.insert(from, up);
         }
-        let _ = flows[&from].send_to(&buf[..len], node);
+        shared.send(&flows[&from], &buf[..len], node);
     }
+}
+
+/// Send each held-back packet when it is due, in the order they are due
+fn send_late(rx: mpsc::Receiver<Late>) {
+    let mut pending: VecDeque<Late> = VecDeque::new();
+    loop {
+        let got = match pending.front() {
+            Some(first) => rx.recv_timeout(first.at.saturating_duration_since(Instant::now())),
+            None => rx.recv().map_err(|_| RecvTimeoutError::Disconnected),
+        };
+        match got {
+            Ok(late) => {
+                let at = pending.partition_point(|p| p.at <= late.at);
+                pending.insert(at, late);
+            }
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => return,
+        }
+        while pending.front().is_some_and(|p| p.at <= Instant::now()) {
+            let p = pending.pop_front().unwrap();
+            let _ = p.socket.send_to(&p.bytes, p.to);
+        }
+    }
+}
+
+/// A random number in [0, 1), for --loss and --jitter
+fn random() -> f64 {
+    static STATE: AtomicU64 = AtomicU64::new(0);
+    let mut state = STATE.fetch_add(0x9e3779b97f4a7c15, Ordering::Relaxed);
+    (crate::utils::splitmix(&mut state) >> 11) as f64 / (1u64 << 53) as f64
 }
 
 /// Pids of the other processes with a UDP socket bound to local port `port`. `lsof -i` also

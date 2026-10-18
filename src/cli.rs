@@ -54,6 +54,18 @@ pub struct Cli {
     #[arg(help_heading = "Network", long, value_name = "FAULT", value_parser = Fault::parse, conflicts_with = "log_folder")]
     pub fault: Vec<(Duration, Fault)>,
 
+    /// Hold back every packet between nodes by DELAY (e.g. 100ms), in each direction
+    #[arg(long, value_name = "DELAY", value_parser = parse_duration, default_value = "0ms", help_heading = "Network", conflicts_with = "log_folder")]
+    pub delay: Duration,
+
+    /// Spread --delay by up to JITTER either way (e.g. 20ms), so packets can arrive out of order
+    #[arg(long, value_name = "JITTER", value_parser = parse_duration, default_value = "0ms", help_heading = "Network", conflicts_with = "log_folder")]
+    pub jitter: Duration,
+
+    /// Drop PERCENT of the packets between nodes at random (e.g. 1), in each direction
+    #[arg(long, value_name = "PERCENT", default_value_t = 0.0, help_heading = "Network", conflicts_with = "log_folder")]
+    pub loss: f64,
+
     /// Add a random fault schedule from SEED: a stop, isolate, split or restart every 20-60s,
     /// healed 20-60s later. The same seed and node count give the same schedule; it is saved as
     /// --fault arguments in the run's faults.txt. Without --headless it runs for an hour
