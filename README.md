@@ -1,12 +1,14 @@
 # jamboree
 
-Terminal UI for watching the logs of several JAM nodes side by side. Built while
-developing [Jamixir](https://jamixir.org), to follow one event (a block being authored
-and imported, say) across a local testnet: freeze every pane at once, scroll each node,
-and highlight the same block hash in all of them.
+Run a local testnet of any JAM client and break it on purpose. jamboree starts N nodes from
+one command template, shows their logs side by side, and stops, isolates, splits or restarts
+nodes, by key or on a schedule (`--fault '60s split 0,1,2/3,4,5'`), with a marker in every
+node's log at each fault. Linux and macOS, no root.
 
-Normal mode starts each node with a shell command you pass with `--cmd`, so it works
-with any JAM client. Log-viewer mode (`--logs`) works on any folder of `*.log` files.
+To follow one event across the network, freeze every pane at once, scroll each node and
+highlight the same block hash in all of them. `--logs` replays any folder of `*.log` files.
+Built while developing [Jamixir](https://jamixir.org), where its faults found
+[several bugs](https://github.com/jamixir/jamixir/issues?q=jam-ui).
 
 <img width="2145" height="1179" alt="Image" src="https://github.com/user-attachments/assets/29b5ef57-5c6f-46c3-983e-5f387fe8bdec" />
 
