@@ -9,8 +9,7 @@ const GRID_MENU_NORMAL: &str = " [←→] Node  [↑↓] Scroll  [/] Search  [Sp
 const FOCUSED_MENU_LOG_VIEWER: &str = " [Esc] Grid  [/] Search  [?] Help  [q] Quit";
 const FOCUSED_MENU_NORMAL: &str = " [Esc] Grid  [/] Search  [Space] Freeze  [s] Stop  [r] Restart  [i] Isolate  [p] Split  [?] Help  [q] Quit";
 
-const TAG_HINT_GRID: &str = "  [←→ Tag] [Del Remove]";
-const TAG_HINT_FOCUSED: &str = "  [←→ Tag] [Del Remove]";
+const MATCH_HINT: &str = "  [n/N] Match  [^G] Only matches";
 const PAUSED_INDICATOR: &str = "  [FROZEN]";
 const PAUSED_INDICATOR_FOCUSED: &str = " [FROZEN]";
 const GREP_INDICATOR: &str = " [GREP]";
@@ -31,12 +30,12 @@ pub fn grid_menu(app: &AppState, has_tags: bool) -> String {
 
             let grep_status = if app.grep_mode { GREP_INDICATOR } else { "" };
 
-            let tag_hint = match has_tags {
-                true => TAG_HINT_GRID,
+            let match_hint = match has_tags {
+                true => MATCH_HINT,
                 false => "",
             };
 
-            format!("{}{}{}{}", base_menu, status, grep_status, tag_hint)
+            format!("{}{}{}{}", base_menu, status, grep_status, match_hint)
         }
     }
 }
@@ -66,12 +65,12 @@ pub fn focused_menu(app: &AppState, has_tags: bool) -> String {
                 _ => String::new(),
             };
 
-            let tag_hint = match has_tags {
-                true => TAG_HINT_FOCUSED,
+            let match_hint = match has_tags {
+                true => MATCH_HINT,
                 false => "",
             };
 
-            format!("{} {}{}{}{}", base_menu, status, grep_status, search_indicator, tag_hint)
+            format!("{} {}{}{}{}", base_menu, status, grep_status, search_indicator, match_hint)
         }
     }
 }
