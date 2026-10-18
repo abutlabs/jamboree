@@ -28,13 +28,8 @@ use crate::ui::focused;
 use crate::ui::help;
 use ui::grid;
 
-/// One labelled `sh -c` command per node, with `{i}` replaced by the node index:
-/// a single --cmd is the template for every node, several --cmd give one node each
-fn node_commands(
-    cmds: &[String],
-    nodes: Option<usize>,
-    mut net: Option<&mut Net>,
-) -> Result<Vec<(String, CommandBuilder)>> {
+/// Number of nodes: a single --cmd is the template for every node, several --cmd give one node each
+fn node_count(cmds: &[String], nodes: Option<usize>) -> Result<usize> {
     let count = match (cmds.len(), nodes) {
         (1, n) => n.unwrap_or(6),
         (len, None) => len,
@@ -42,16 +37,27 @@ fn node_commands(
         (len, Some(n)) => anyhow::bail!("--nodes {} does not match the {} --cmd flags", n, len),
     };
     anyhow::ensure!(count > 0, "--nodes must be at least 1");
+    Ok(count)
+}
+
+/// One labelled `sh -c` command per node, with `{i}` replaced by the node index and `{port}` by
+/// the port it listens on, also in `$PORT` when the ports were moved
+fn node_commands(
+    cmds: &[String],
+    ports: &[u16],
+    moved: bool,
+) -> Result<Vec<(String, CommandBuilder)>> {
     let cwd = std::env::current_dir()?;
-    (0..count)
+    (0..ports.len())
         .map(|id| {
             let (label, cmd) = utils::split_label(&cmds[if cmds.len() == 1 { 0 } else { id }]);
-            let prefix = match net.as_deref_mut() {
-                Some(net) => net.add_node(id)?,
-                None => String::new(),
-            };
+            let cmd = utils::node_command(cmd, id)
+                .replace("{port}", &ports[id].to_string());
             let mut c = CommandBuilder::new("sh");
-            c.args(["-c", &(prefix + &utils::node_command(cmd, id))]);
+            c.args(["-c", &cmd]);
+            if moved {
+                c.env("PORT", ports[id].to_string());
+            }
             c.cwd(&cwd);
             Ok((label.unwrap_or("Node").to_string(), c))
         })
@@ -79,16 +85,13 @@ async fn main() -> Result<()> {
 
     // Resolve the node commands before terminal setup (so errors print normally)
     let setup = || -> Result<_> {
-        let mut net = None;
-        if cli.net_faults {
-            net::reexec_isolated()?;
-            net = Some(Net::new()?);
+        if cli.log_folder.is_some() {
+            return Ok((Vec::new(), None));
         }
-        let commands = match &cli.log_folder {
-            None => node_commands(&cli.cmd, cli.nodes, net.as_mut())?,
-            Some(_) => Vec::new(),
-        };
-        Ok((commands, net))
+        let count = node_count(&cli.cmd, cli.nodes)?;
+        let net = Net::start(cli.genesis_port, count, cli.move_ports, cli.listen_port)?;
+        let commands = node_commands(&cli.cmd, net.listen_ports(), cli.move_ports)?;
+        Ok((commands, Some(net)))
     };
     let (commands, net) = match setup() {
         Ok(setup) => setup,

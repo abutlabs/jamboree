@@ -55,7 +55,7 @@ pub fn render(f: &mut Frame) {
   ─────────────────────────────────────────────────────
   Space           Freeze/unfreeze all panes
   s               Stop/continue the focused node (SIGSTOP)
-  i               Isolate/heal the focused node (--net-faults)
+  i               Isolate/heal the focused node
   x               Shutdown all nodes
   q               Quit
   ?               Toggle this help

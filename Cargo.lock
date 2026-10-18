@@ -378,6 +378,7 @@ dependencies = [
  "crossterm",
  "portable-pty",
  "ratatui",
+ "socket2",
  "strip-ansi-escapes",
  "tokio",
 ]
