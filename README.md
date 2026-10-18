@@ -1,4 +1,4 @@
-# Jam UI
+# jamboree
 
 Terminal UI for watching the logs of several JAM nodes side by side. Built while
 developing [Jamixir](https://jamixir.org), to follow one event (a block being authored
@@ -13,10 +13,10 @@ with any JAM client. Log-viewer mode (`--logs`) works on any folder of `*.log` f
 ## Install
 
 ```bash
-cargo install --git https://github.com/jamixir/jam-ui
+cargo install --git https://github.com/jamixir/jamboree
 ```
 
-This puts `jam-ui` in `~/.cargo/bin`. From a clone, `cargo run -- <args>` works the same way.
+This puts `jamboree` in `~/.cargo/bin`. From a clone, `cargo run -- <args>` works the same way.
 
 ## Usage
 
@@ -24,19 +24,19 @@ This puts `jam-ui` in `~/.cargo/bin`. From a clone, `cargo run -- <args>` works 
 is replaced by the node index (0, 1, 2, ...), and every `{port}` by the port the node
 listens on (its genesis port unless `--move-ports`). `--nodes` sets how many nodes to start
 (default 6). Each line a node prints to stdout/stderr shows up in its pane. Without
-`--cmd` or `--logs`, jam-ui prints its usage.
+`--cmd` or `--logs`, jamboree prints its usage.
 
 ```bash
 # Docker: one container per node
-jam-ui --nodes 4 --cmd 'docker run --rm --init --name jam-node-{i} <image> <flags for node {i}>'
+jamboree --nodes 4 --cmd 'docker run --rm --init --name jam-node-{i} <image> <flags for node {i}>'
 
 # A local binary
-jam-ui --nodes 3 --cmd './my-jam-node <flags for node {i}>'
+jamboree --nodes 3 --cmd './my-jam-node <flags for node {i}>'
 ```
 
 `<image>`, `./my-jam-node` and the flags are placeholders: use whatever starts one node
 of your client (keys, ports and data directory per index). Keep `--init` on `docker run`:
-without it the containers keep running after jam-ui quits.
+without it the containers keep running after jamboree quits.
 
 Every run's logs are saved per node, so a timeline of authored blocks across nodes is one
 grep away, e.g. `grep -h "Authored block" logs/<run>/node_*.log | sort`.
@@ -44,7 +44,7 @@ grep away, e.g. `grep -h "Authored block" logs/<run>/node_*.log | sort`.
 ### Jamixir
 
 ```bash
-jam-ui --nodes 6 --cmd 'cd ~/src/jamixir && ./node.sh {i}'
+jamboree --nodes 6 --cmd 'cd ~/src/jamixir && ./node.sh {i}'
 ```
 
 Extra `node.sh` flags go straight into the command, e.g. `./node.sh {i} -x 4`.
@@ -62,7 +62,7 @@ PolkaJam's dev chain spec:
 ```bash
 polkajam --chain dev dump-spec spec.json
 PJ='polkajam=polkajam --chain dev run --temp --dev-validator {i} --rpc-port 1980{i}'
-jam-ui --cmd "$PJ" --cmd "$PJ" --cmd "$PJ" --cmd "$PJ" \
+jamboree --cmd "$PJ" --cmd "$PJ" --cmd "$PJ" --cmd "$PJ" \
        --cmd 'mine=./my-jam-node --chain spec.json --validator {i} --bootnode <polkajam node 0 address>'
 ```
 
@@ -79,25 +79,25 @@ are dropped silently in both directions, like a broken link, and every log gets 
 line. It works on Linux and macOS without root and without changing the node command:
 
 ```sh
-jam-ui --nodes 6 --cmd 'cd ~/src/jamixir && ./node.sh {i}'
+jamboree --nodes 6 --cmd 'cd ~/src/jamixir && ./node.sh {i}'
 ```
 
 Peers dial each node on its genesis port (`--genesis-port`, default 40000, so node i is on
-40000+i). jam-ui shares that port with the node: it binds the more specific 127.0.0.1 on the
+40000+i). jamboree shares that port with the node: it binds the more specific 127.0.0.1 on the
 same port, so the OS hands it the peers' packets, relays them to the node and drops them
 while it is cut off. The node keeps listening where its genesis says.
 
 Some clients' ports cannot be shared (on Linux the client must set `SO_REUSEPORT`; on macOS
 it must listen on `::`). Then `i` says so, and `--move-ports` is the fallback: each node is
 told to listen on another port, given as `$PORT` and `{port}`, which you pass to the client's
-listen-port flag (`--listen-port P` fixes them to `P+i`), and jam-ui takes the genesis ports.
+listen-port flag (`--listen-port P` fixes them to `P+i`), and jamboree takes the genesis ports.
 
 PolkaJam always listens on its genesis port and cannot share it; give it another loopback
 address instead (Linux; on macOS add it once with `sudo ifconfig lo0 alias 127.0.0.2`). If
 it fails with `failed to create an userfaultfd`, add `--pvm-backend interpreter`:
 
 ```sh
-jam-ui --nodes 6 --cmd 'polkajam=polkajam --chain dev run --pvm-backend interpreter --temp \
+jamboree --nodes 6 --cmd 'polkajam=polkajam --chain dev run --pvm-backend interpreter --temp \
   --dev-validator {i} --listen-ip 127.0.0.2 --rpc-port $((19800+{i}))'
 ```
 
@@ -108,22 +108,22 @@ jam-ui --nodes 6 --cmd 'polkajam=polkajam --chain dev run --pvm-backend interpre
 `split A/B`, `restart N` and `heal` (continue, un-isolate and unsplit everything):
 
 ```sh
-jam-ui --nodes 6 --cmd '…' --fault '60s split 0,1,2/3,4,5' --fault '120s heal' \
+jamboree --nodes 6 --cmd '…' --fault '60s split 0,1,2/3,4,5' --fault '120s heal' \
   --fault '150s restart 2'
 ```
 
 ### Docker
 
-Put `{container}` where `docker run` takes the container name; jam-ui fills in a name per node
+Put `{container}` where `docker run` takes the container name; jamboree fills in a name per node
 and run, and then pauses that container for `s` (`docker pause`; SIGSTOP cannot reach it) and
 removes it on restart and quit. Use host networking so nodes reach each other on loopback:
 
 ```sh
-jam-ui --nodes 6 --cmd 'docker run --rm --init --network host --user $(id -u):$(id -g) \
+jamboree --nodes 6 --cmd 'docker run --rm --init --network host --user $(id -u):$(id -g) \
   --name {container} <image> <flags for node {i}>'
 ```
 
-`--user` lets jam-ui share the genesis port for `i`/`p` (Linux shares a port only between
+`--user` lets jamboree share the genesis port for `i`/`p` (Linux shares a port only between
 sockets of one user); for an image that must run as root, use `--move-ports` and pass `$PORT`
 to the node instead. On Fedora and other SELinux systems, mount volumes with `:z`
 (`-v ./spec:/spec:z`). Docker faults need Linux.
@@ -132,13 +132,13 @@ to the node instead. On Fedora and other SELinux systems, mount volumes with `:z
 
 ```bash
 # With search terms (comma-separated, max 6)
-jam-ui --cmd '...' --search "error,warning"
+jamboree --cmd '...' --search "error,warning"
 
 # Log viewer mode: one pane per *.log file in the folder
-jam-ui --logs logs/20260111_161505
+jamboree --logs logs/20260111_161505
 
 # Log viewer mode with search
-jam-ui --logs logs/20260111_161505 --search "error,warning"
+jamboree --logs logs/20260111_161505 --search "error,warning"
 ```
 
 **CLI Options:**

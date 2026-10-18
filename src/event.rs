@@ -201,7 +201,7 @@ pub fn handle_key_event(
             Action::Continue
         }
 
-        // Cut the focused node off from all others, or heal it (every node behind jam-ui's relay)
+        // Cut the focused node off from all others, or heal it (every node behind jamboree's relay)
         KeyCode::Char('i') => {
             if let Some(net) = net {
                 net.set_isolated(nodes, *focused, !net.is_isolated(*focused));
