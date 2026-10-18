@@ -21,6 +21,10 @@ That starts six Jamixir nodes. For any other client, put the command that starts
 `--cmd`; jamboree runs it once per node with `{i}` replaced by 0, 1, 2, ... Linux and macOS,
 no root. From a clone, `cargo run -- <args>` works the same.
 
+No Rust? Download a binary for Linux or macOS (x86_64 or arm64) from
+[Releases](https://github.com/jamixir/jamboree/releases/latest). If macOS blocks it, run
+`xattr -d com.apple.quarantine jamboree`.
+
 Built while developing [Jamixir](https://jamixir.org).
 
 ## Start a network
