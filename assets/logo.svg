@@ -1,30 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
-  <!-- lid -->
-  <rect x="62" y="22" width="132" height="34" rx="9" fill="#2b2140"/>
-  <rect x="62" y="44" width="132" height="6" fill="#463a63"/>
-  <!-- jar -->
-  <path d="M74 56 h108 v10 q30 14 30 52 v86 q0 30 -30 30 h-108 q-30 0 -30 -30 v-86 q0 -38 30 -52 z"
-        fill="#f6eef7" stroke="#2b2140" stroke-width="8" stroke-linejoin="round"/>
-  <!-- jam -->
-  <path d="M52 124 q38 -14 76 0 t76 0 v80 q0 22 -22 22 h-108 q-22 0 -22 -22 z" fill="#d81b60"/>
-  <!-- glass shine -->
-  <path d="M60 116 v72" stroke="#ffffff" stroke-width="7" stroke-linecap="round" opacity="0.55"/>
-  <!-- six nodes in a ring, one link cut -->
-  <g stroke="#ffffff" stroke-width="5" stroke-linecap="round">
-    <line x1="128" y1="138" x2="160" y2="156"/>
-    <line x1="160" y1="156" x2="160" y2="192"/>
-    <line x1="128" y1="210" x2="96" y2="192"/>
-    <line x1="96" y1="192" x2="96" y2="156"/>
-    <line x1="96" y1="156" x2="128" y2="138"/>
-    <line x1="160" y1="192" x2="153" y2="196" />
-    <line x1="135" y1="206" x2="128" y2="210" />
-  </g>
-  <g fill="#ffffff" stroke="#2b2140" stroke-width="4">
-    <circle cx="128" cy="138" r="10"/>
-    <circle cx="160" cy="156" r="10"/>
-    <circle cx="160" cy="192" r="10"/>
-    <circle cx="128" cy="210" r="10"/>
-    <circle cx="96" cy="192" r="10"/>
-    <circle cx="96" cy="156" r="10"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="256" height="256">
+  <style>.tile{fill:#111111}@media (prefers-color-scheme:dark){.tile{fill:#e8e8e8}}</style>
+  <rect class="tile" x="3" y="3" width="12" height="12" rx="2"/>
+  <rect class="tile" x="17" y="3" width="12" height="12" rx="2"/>
+  <rect class="tile" x="3" y="17" width="12" height="12" rx="2"/>
+  <rect x="19" y="19" width="12" height="12" rx="2" fill="#E6007A"/>
 </svg>
