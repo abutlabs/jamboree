@@ -14,7 +14,7 @@ pub fn handle_key_event(
     modifiers: KeyModifiers,
     app: &mut AppState,
     focused: &mut usize,
-    nodes: &[Node],
+    nodes: &mut [Node],
 ) -> Action {
     // If help is showing, any key closes it
     if app.show_help {
@@ -217,7 +217,7 @@ pub fn handle_key_event(
             } else {
                 "continued"
             };
-            for n in nodes {
+            for n in nodes.iter() {
                 n.mark(&format!("{} {} {}", node.label, node.id, what));
             }
             Action::Continue
@@ -229,12 +229,40 @@ pub fn handle_key_event(
             match app.net.as_ref().map(|net| net.toggle_isolated(*focused)) {
                 Some(Ok(isolated)) => {
                     let what = if isolated { "isolated" } else { "healed" };
-                    for n in nodes {
+                    for n in nodes.iter() {
                         n.mark(&format!("{} {} {}", node.label, node.id, what));
                     }
                 }
                 Some(Err(why)) => node.mark(&why),
                 None => node.mark("isolate works only on running nodes"),
+            }
+            Action::Continue
+        }
+
+        // Split the network at the focused node (nodes before it | it and after), or heal it
+        KeyCode::Char('p') if !app.log_viewer_mode => {
+            let at = *focused;
+            let what = match app.net.as_ref() {
+                None => Err("split works only on running nodes".to_string()),
+                Some(_) if at == 0 => Err("to split, focus the first node of side B".to_string()),
+                Some(net) => net.toggle_split(at).map(|split| match split {
+                    true => format!("split 0-{} | {}-{}", at - 1, at, nodes.len() - 1),
+                    false => "split healed".to_string(),
+                }),
+            };
+            match what {
+                Ok(what) => nodes.iter().for_each(|n| n.mark(&what)),
+                Err(why) => nodes[at].mark(&why),
+            }
+            Action::Continue
+        }
+
+        // Restart the focused node: kill it and run its command again
+        KeyCode::Char('r') if !app.log_viewer_mode => {
+            let what = format!("{} {} restarted", nodes[*focused].label, *focused);
+            nodes.iter().for_each(|n| n.mark(&what));
+            if let Err(e) = nodes[*focused].restart() {
+                nodes[*focused].mark(&format!("restart failed: {e:#}"));
             }
             Action::Continue
         }

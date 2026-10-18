@@ -73,9 +73,10 @@ Tried with PolkaJam, Typeberry, SpaceJam and Jamixir dev networks.
 
 ### Network faults
 
-`i` cuts the focused node off from all the others and heals it again: packets are dropped
-silently in both directions, like a broken link, and every log gets a marker line. It works
-on Linux and macOS without root and without changing the node command:
+`i` cuts the focused node off from all the others; `p` splits the network in two at the
+focused node (e.g. focus node 4 of 6 for 0-3 | 4-5). Press the key again to heal. Packets
+are dropped silently in both directions, like a broken link, and every log gets a marker
+line. It works on Linux and macOS without root and without changing the node command:
 
 ```sh
 jam-ui --nodes 6 --cmd 'cd ~/src/jamixir && ./node.sh {i}'
@@ -119,7 +120,11 @@ jam-ui --logs logs/20260111_161505 --search "error,warning"
 - **`Space`** - Freeze/unfreeze all panes (enables scrolling; the nodes keep running)
 - **`S`** - Stop/continue the focused node (SIGSTOP/SIGCONT to its process group). The
   node stays connected but goes silent, then wakes up behind. Every log gets a marker line
+- **`R`** - Restart the focused node: kill it and run its command again (put `rm -rf db{i} &&`
+  in `--cmd` to restart from an empty database)
 - **`I`** - Isolate/heal the focused node (see Network faults)
+- **`P`** - Split the network at the focused node: the nodes before it on one side, it and the
+  ones after on the other (see Network faults). `P` again heals
 - **`X`** - Shutdown all nodes: TERM, then KILL after 3 s (auto-freezes, allows viewing logs)
 - **`Enter`** - Zoom into focused node
 - **`Esc`** - Return to grid view

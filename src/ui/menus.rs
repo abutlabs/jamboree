@@ -4,10 +4,10 @@ use crate::AppState;
 const SEARCH_MENU: &str = " Search: {}_  [Enter] Apply  [Esc] Cancel ";
 
 const GRID_MENU_LOG_VIEWER: &str = " [0-9] Node  [Tab] Focus  [/] Search  [Enter] Zoom  [?] Help  [q] Quit";
-const GRID_MENU_NORMAL: &str = " [0-9] Node  [Tab] Focus  [/] Search  [Space] Freeze  [s] Stop  [i] Isolate  [Enter] Zoom  [?] Help  [q] Quit";
+const GRID_MENU_NORMAL: &str = " [0-9] Node  [Tab] Focus  [/] Search  [Space] Freeze  [s] Stop  [r] Restart  [i] Isolate  [p] Split  [Enter] Zoom  [?] Help  [q] Quit";
 
 const FOCUSED_MENU_LOG_VIEWER: &str = " [Esc] Grid  [/] Search  [?] Help  [q] Quit";
-const FOCUSED_MENU_NORMAL: &str = " [Esc] Grid  [/] Search  [Space] Freeze  [s] Stop  [i] Isolate  [?] Help  [q] Quit";
+const FOCUSED_MENU_NORMAL: &str = " [Esc] Grid  [/] Search  [Space] Freeze  [s] Stop  [r] Restart  [i] Isolate  [p] Split  [?] Help  [q] Quit";
 
 const TAG_HINT_GRID: &str = "  [←→ Tag] [Del Remove]";
 const TAG_HINT_FOCUSED: &str = "  [←→ Tag] [Del Remove]";

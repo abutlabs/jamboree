@@ -1,4 +1,5 @@
-//! Network faults: a UDP relay on each node's genesis port that drops a cut-off node's traffic.
+//! Network faults: a UDP relay on each node's genesis port that drops traffic between nodes
+//! that are cut off from each other (an isolated node, or the two sides of a split).
 //! Default: shares the genesis port with the node. --move-ports: the node moves to $PORT.
 
 use anyhow::Result;
@@ -23,8 +24,10 @@ struct Shared {
     moved: bool,
     /// Whether node j's relay is up
     relayed: Mutex<Vec<bool>>,
-    /// Partition group of each node; datagrams between different groups are dropped
-    groups: Mutex<Vec<usize>>,
+    /// Nodes cut off from all others
+    isolated: Mutex<Vec<bool>>,
+    /// Nodes from this index on are split off from the ones before
+    split_at: Mutex<Option<usize>>,
     /// Which node owns a local UDP port, as last looked up
     owners: Mutex<HashMap<u16, (Option<usize>, Instant)>>,
 }
@@ -49,7 +52,8 @@ impl Net {
             listen,
             moved: move_ports,
             relayed: Mutex::new(vec![false; n]),
-            groups: Mutex::new(vec![0; n]),
+            isolated: Mutex::new(vec![false; n]),
+            split_at: Mutex::new(None),
             owners: Mutex::new(HashMap::new()),
         });
         let watcher = shared.clone();
@@ -63,39 +67,62 @@ impl Net {
     }
 
     pub fn is_isolated(&self, i: usize) -> bool {
-        self.shared.groups.lock().unwrap()[i] != 0
+        self.shared.isolated.lock().unwrap()[i]
     }
 
-    /// Cut node i off from every other node, or heal it. Returns whether it is now isolated,
-    /// or why it cannot be: every node must be behind the relay, or traffic leaks around it.
+    /// Side of the split node i is on, if the network is split
+    pub fn split_side(&self, i: usize) -> Option<char> {
+        let at = (*self.shared.split_at.lock().unwrap())?;
+        Some(if i < at { 'A' } else { 'B' })
+    }
+
+    /// Cut node i off from every other node, or heal it. Returns whether it is now isolated.
     pub fn toggle_isolated(&self, i: usize) -> Result<bool, String> {
-        let direct: Vec<String> = (self.shared.relayed.lock().unwrap().iter())
-            .enumerate()
-            .filter(|(_, relayed)| !**relayed)
-            .map(|(k, _)| k.to_string())
-            .collect();
-        if !direct.is_empty() {
-            let (noun, verb) = if direct.len() == 1 {
-                ("node", "does")
-            } else {
-                ("nodes", "do")
-            };
-            let why = match self.shared.moved {
-                true => format!("{verb} not listen on $PORT"),
-                false => format!("{verb} not share the genesis port; restart with --move-ports"),
-            };
-            return Err(format!(
-                "cannot cut nodes off: {noun} {} {why}",
-                direct.join(", ")
-            ));
-        }
-        let mut groups = self.shared.groups.lock().unwrap();
-        groups[i] = if groups[i] == 0 { i + 1 } else { 0 };
-        Ok(groups[i] != 0)
+        self.shared.all_relayed()?;
+        let mut isolated = self.shared.isolated.lock().unwrap();
+        isolated[i] = !isolated[i];
+        Ok(isolated[i])
+    }
+
+    /// Split nodes `at..` off from nodes `..at`, or heal the split. Returns whether it is now
+    /// split.
+    pub fn toggle_split(&self, at: usize) -> Result<bool, String> {
+        self.shared.all_relayed()?;
+        let mut split_at = self.shared.split_at.lock().unwrap();
+        *split_at = match *split_at {
+            Some(_) => None,
+            None => Some(at),
+        };
+        Ok(split_at.is_some())
     }
 }
 
 impl Shared {
+    /// Every node must be behind the relay, or traffic leaks around a cut
+    fn all_relayed(&self) -> Result<(), String> {
+        let direct: Vec<String> = (self.relayed.lock().unwrap().iter())
+            .enumerate()
+            .filter(|(_, relayed)| !**relayed)
+            .map(|(k, _)| k.to_string())
+            .collect();
+        if direct.is_empty() {
+            return Ok(());
+        }
+        let (noun, verb) = if direct.len() == 1 {
+            ("node", "does")
+        } else {
+            ("nodes", "do")
+        };
+        let why = match self.moved {
+            true => format!("{verb} not listen on $PORT"),
+            false => format!("{verb} not share the genesis port; restart with --move-ports"),
+        };
+        Err(format!(
+            "cannot cut nodes off: {noun} {} {why}",
+            direct.join(", ")
+        ))
+    }
+
     /// For the first two minutes, start node j's relay once the node listens
     fn relay_listening_nodes(self: Arc<Self>) {
         let until = Instant::now() + Duration::from_secs(120);
@@ -134,12 +161,18 @@ impl Shared {
 
     /// Whether traffic between the sender on local port `port` and node j is cut
     fn cut(&self, port: u16, j: usize) -> bool {
-        let groups = self.groups.lock().unwrap().clone();
-        if groups.iter().all(|&g| g == 0) {
+        let isolated = self.isolated.lock().unwrap().clone();
+        let split_at = *self.split_at.lock().unwrap();
+        if split_at.is_none() && !isolated.contains(&true) {
             return false;
         }
-        self.owner(port, groups.len())
-            .is_some_and(|k| groups[k] != groups[j])
+        // Nodes in different groups are cut off: an isolated node is a group of its own
+        let group = |k: usize| match isolated[k] {
+            true => usize::MAX - k,
+            false => split_at.map_or(0, |at| usize::from(k >= at)),
+        };
+        self.owner(port, isolated.len())
+            .is_some_and(|k| group(k) != group(j))
     }
 
     /// The node whose process owns local UDP port `port`: the one that also owns a listen
