@@ -14,6 +14,8 @@
 - Install with `cargo install --git https://github.com/jamixir/jam-ui`.
 - `x` and `q` stop each node's whole process group (TERM, then KILL after 3 s), so no
   client outlives jam-ui.
+- `--fault '[<time>] <action>'` schedules stop, isolate, split, restart and heal, e.g.
+  `--fault '60s split 0,1,2/3,4,5'`.
 - `s` stops/continues the focused node (SIGSTOP/SIGCONT) and writes a marker line into
   every node's log. `Space` is now called freeze, since the nodes keep running.
 - `i` cuts the focused node off from the others and heals it, on Linux and macOS without

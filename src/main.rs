@@ -21,9 +21,14 @@ use crossterm::{
 };
 use portable_pty::CommandBuilder;
 use ratatui::prelude::*;
-use std::{io::stdout, path::PathBuf, process, time::Duration};
+use std::{
+    io::stdout,
+    path::PathBuf,
+    process,
+    time::{Duration, Instant},
+};
 
-use crate::event::{Action, handle_key_event, handle_mouse_event};
+use crate::event::{Action, Fault, handle_key_event, handle_mouse_event};
 use crate::ui::focused;
 use crate::ui::help;
 use ui::grid;
@@ -105,7 +110,7 @@ async fn main() -> Result<()> {
     // Resolve the node commands before terminal setup (so errors print normally)
     let setup = || -> Result<_> {
         if cli.log_folder.is_some() {
-            return Ok((Vec::new(), None));
+            return Ok((Vec::new(), None, Vec::new()));
         }
         let count = node_count(&cli.cmd, cli.nodes)?;
         let containers = container_names(&cli.cmd, count);
@@ -118,9 +123,14 @@ async fn main() -> Result<()> {
         )?;
         let ports = net.listen_ports();
         let commands = node_commands(&cli.cmd, ports, cli.move_ports, &containers)?;
-        Ok((commands, Some(net)))
+        for (_, fault) in &cli.fault {
+            fault.check(count).map_err(anyhow::Error::msg)?;
+        }
+        let mut faults = cli.fault.clone();
+        faults.sort_by_key(|(at, _)| *at);
+        Ok((commands, Some(net), faults))
     };
-    let (commands, net) = match setup() {
+    let (commands, net, faults) = match setup() {
         Ok(setup) => setup,
         Err(e) => {
             eprintln!("Error: {:#}", e);
@@ -128,7 +138,7 @@ async fn main() -> Result<()> {
         }
     };
 
-    if let Err(e) = run_app(cli, commands, net).await {
+    if let Err(e) = run_app(cli, commands, net, faults).await {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     }
@@ -139,6 +149,7 @@ async fn run_app(
     cli: Cli,
     commands: Vec<(String, CommandBuilder, Option<String>)>,
     net: Option<Net>,
+    mut faults: Vec<(Duration, Fault)>,
 ) -> Result<()> {
     enable_raw_mode()?;
     execute!(stdout(), EnterAlternateScreen, Hide)?;
@@ -195,8 +206,21 @@ async fn run_app(
     };
 
     let mut focused = 0usize;
+    let started = Instant::now();
 
     loop {
+        // Apply each --fault when due; one that cuts nodes off first waits, as long as the relay
+        // does, for every node to listen behind it
+        while let (Some((at, fault)), Some(net)) = (faults.first(), &net) {
+            let waiting =
+                fault.cuts() && !net.ready() && started.elapsed() < crate::net::RELAY_WAIT;
+            if started.elapsed() < *at || waiting {
+                break;
+            }
+            fault.apply(&mut nodes, net);
+            faults.remove(0);
+        }
+
         terminal.draw(|f| {
             match view_mode {
                 ViewMode::Grid => {

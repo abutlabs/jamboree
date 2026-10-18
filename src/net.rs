@@ -14,6 +14,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// How long the relay waits for nodes to start listening
+pub const RELAY_WAIT: Duration = Duration::from_secs(120);
+
 pub struct Net {
     shared: Arc<Shared>,
 }
@@ -64,6 +67,11 @@ impl Net {
         let watcher = shared.clone();
         thread::spawn(move || watcher.relay_listening_nodes());
         Ok(Net { shared })
+    }
+
+    /// Whether every node is behind the relay, so nodes can be cut off
+    pub fn ready(&self) -> bool {
+        self.shared.all_relayed().is_ok()
     }
 
     /// Port each node listens on
@@ -153,9 +161,9 @@ impl Shared {
         ))
     }
 
-    /// For the first two minutes, start node j's relay once the node listens
+    /// For RELAY_WAIT, start node j's relay once the node listens
     fn relay_listening_nodes(self: Arc<Self>) {
-        let until = Instant::now() + Duration::from_secs(120);
+        let until = Instant::now() + RELAY_WAIT;
         while Instant::now() < until && self.relayed.lock().unwrap().contains(&false) {
             for j in 0..self.listen.len() {
                 if self.relayed.lock().unwrap()[j] || !self.listening(j) {

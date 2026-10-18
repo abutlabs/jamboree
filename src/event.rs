@@ -3,6 +3,7 @@ use crate::ViewMode;
 use crate::net::Net;
 use crate::node::{self, Node};
 use crossterm::event::{KeyCode, KeyModifiers, MouseEventKind};
+use std::time::Duration;
 
 pub enum Action {
     Continue,
@@ -292,4 +293,108 @@ pub fn handle_mouse_event(mouse: MouseEventKind, app: &mut AppState, focused: us
     }
 
     Action::Continue
+}
+
+/// A --fault action; split lists the nodes of each side
+#[derive(Clone, Debug)]
+pub enum Fault {
+    Stop(usize),
+    Isolate(usize),
+    Split(Vec<Vec<usize>>),
+    Restart(usize),
+    Heal,
+}
+
+impl Fault {
+    /// Parse `[<time>] <action>`, e.g. `60s split 0,1,2/3,4,5`; no time means at the start
+    pub fn parse(s: &str) -> Result<(Duration, Fault), String> {
+        let mut words: Vec<&str> = s.split_whitespace().collect();
+        let time = |w: &str| match w.char_indices().last() {
+            Some((at, 's')) => w[..at].parse().ok(),
+            Some((at, 'm')) => w[..at].parse().ok().map(|m: u64| m * 60),
+            _ => None,
+        };
+        let at = match words.first().and_then(|w| time(w)) {
+            Some(secs) => {
+                words.remove(0);
+                Duration::from_secs(secs)
+            }
+            None => Duration::ZERO,
+        };
+        let index = |w: &str| w.parse().map_err(|_| format!("'{w}' is not a node index"));
+        let fault = match words[..] {
+            ["stop", i] => Fault::Stop(index(i)?),
+            ["isolate", i] => Fault::Isolate(index(i)?),
+            ["restart", i] => Fault::Restart(index(i)?),
+            ["split", sides] => Fault::Split(
+                (sides.split('/'))
+                    .map(|side| side.split(',').map(index).collect())
+                    .collect::<Result<_, _>>()?,
+            ),
+            ["heal"] => Fault::Heal,
+            _ => {
+                return Err(format!(
+                    "'{s}': expected [<time>] stop N | isolate N | split A/B | restart N | heal, \
+                 e.g. '60s split 0,1,2/3,4,5'"
+                ));
+            }
+        };
+        Ok((at, fault))
+    }
+
+    /// Check the node indices against n nodes
+    pub fn check(&self, n: usize) -> Result<(), String> {
+        let nodes = match self {
+            Fault::Stop(i) | Fault::Isolate(i) | Fault::Restart(i) => vec![*i],
+            Fault::Split(sides) => sides.concat(),
+            _ => vec![],
+        };
+        if let Some(i) = nodes.iter().find(|&&i| i >= n) {
+            return Err(format!("--fault: there is no node {i} in {n} nodes"));
+        }
+        if let Fault::Split(sides) = self {
+            let mut sorted = sides.concat();
+            sorted.sort();
+            if n < 2 || sides.iter().any(Vec::is_empty) || sorted != (0..n).collect::<Vec<_>>() {
+                return Err(format!(
+                    "--fault split: each of the {n} nodes must be on exactly one side"
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Apply the fault as its key would, with the same marks in every log
+    pub fn apply(&self, nodes: &mut [Node], net: &Net) {
+        match self {
+            Fault::Stop(i) => node::set_stopped(nodes, *i, true),
+            Fault::Isolate(i) => net.set_isolated(nodes, *i, true),
+            Fault::Restart(i) => node::restart(nodes, *i),
+            Fault::Split(sides) => {
+                let mut side = vec![0; nodes.len()];
+                for (s, members) in sides.iter().enumerate() {
+                    members.iter().for_each(|&i| side[i] = s);
+                }
+                net.set_split(nodes, side)
+            }
+            Fault::Heal => {
+                for i in 0..nodes.len() {
+                    if nodes[i].is_stopped() {
+                        node::set_stopped(nodes, i, false);
+                    }
+                    if net.is_isolated(i) {
+                        net.set_isolated(nodes, i, false);
+                    }
+                }
+                if net.split_side(0).is_some() {
+                    net.set_split(nodes, vec![0; nodes.len()]);
+                }
+            }
+        }
+    }
+
+    /// Whether the fault cuts nodes off, so must wait until every node is behind the relay
+    pub fn cuts(&self) -> bool {
+        matches!(self, Fault::Isolate(_) | Fault::Split(_))
+    }
 }
