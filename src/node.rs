@@ -24,8 +24,9 @@ pub struct Node {
     paused_buffer: Arc<Mutex<String>>,
     current_size: Arc<Mutex<PtySize>>,
     pub paused: Arc<Mutex<bool>>,
-    child: Option<Mutex<Box<dyn Child + Send + Sync>>>,
-    log_file: Option<Arc<Mutex<File>>>,
+    /// Pid of the `sh -c` that runs the node; also its process group id
+    pid: Option<u32>,
+    log_path: Option<PathBuf>,
     /// The node's process group is SIGSTOPped
     stopped: AtomicBool,
 }
@@ -51,9 +52,10 @@ impl Node {
             pixel_height: 0,
         }));
         let paused = Arc::new(Mutex::new(false));
-        let child = Some(Mutex::new(pair.slave.spawn_command(cmd)?));
+        let child = pair.slave.spawn_command(cmd)?;
+        let log_path = log_dir.join(format!("node_{}.log", id));
 
-        let mut node = Node {
+        let node = Node {
             id,
             label,
             master: Some(master),
@@ -61,26 +63,24 @@ impl Node {
             paused_buffer,
             current_size,
             paused,
-            child,
-            log_file: None,
+            pid: child.process_id(),
+            log_path: Some(log_path.clone()),
             stopped: AtomicBool::new(false),
         };
 
         // Start the reader task
-        let log_path = log_dir.join(format!("node_{}.log", id));
         let log_file = OpenOptions::new()
             .create(true)
             .append(true)
             .open(log_path)?;
-        node.log_file = Some(Arc::new(Mutex::new(log_file)));
-        node.start_reader_task();
+        node.start_reader_task(log_file, child);
 
         Ok(node)
     }
 
-    fn start_reader_task(&self) {
+    /// Copies the node's output to its log and pane; reaps the shell once the output ends.
+    fn start_reader_task(&self, mut log_file: File, mut child: Box<dyn Child + Send + Sync>) {
         let id = self.id;
-        let log_file = self.log_file.clone();
         let buffer = self.buffer.clone();
         let paused_buffer = self.paused_buffer.clone();
         let paused = self.paused.clone();
@@ -124,8 +124,16 @@ impl Node {
                 // Strip ANSI codes for both log file and UI (clean text in logs, no escape codes)
                 let clean_text = String::from_utf8_lossy(&strip(text.as_bytes())).replace('\r', "");
 
-                append(&clean_text, &log_file, &buffer, &paused_buffer, &paused);
+                append(
+                    &clean_text,
+                    Some(&mut log_file),
+                    &buffer,
+                    &paused_buffer,
+                    &paused,
+                );
             }
+            // Reap the shell, so a zombie does not count as alive in `signal("0")`
+            let _ = child.wait();
         });
     }
 
@@ -136,9 +144,13 @@ impl Node {
             chrono::Local::now().format("%H:%M:%S%.3f"),
             text
         );
+        let mut log_file = self
+            .log_path
+            .as_ref()
+            .and_then(|p| OpenOptions::new().append(true).open(p).ok());
         append(
             &line,
-            &self.log_file,
+            log_file.as_mut(),
             &self.buffer,
             &self.paused_buffer,
             &self.paused,
@@ -188,8 +200,8 @@ impl Node {
             paused_buffer,
             current_size,
             paused,
-            child: None,
-            log_file: None,
+            pid: None,
+            log_path: None,
             stopped: AtomicBool::new(false),
         };
 
@@ -231,13 +243,7 @@ impl Node {
     /// so it reaches the client and not just the `sh -c` around it. The pty makes that shell
     /// a session leader, so its pid is the group id. Returns false if nothing was signalled.
     pub fn signal(&self, sig: &str) -> bool {
-        let Some(child) = &self.child else {
-            return false;
-        };
-        let mut child = child.lock().unwrap();
-        // Reap the shell if it exited, so a zombie does not count as alive
-        let _ = child.try_wait();
-        let Some(pid) = child.process_id() else {
+        let Some(pid) = self.pid else {
             return false;
         };
         #[cfg(unix)]
@@ -287,13 +293,13 @@ pub fn stop_all(nodes: &[Node], grace: Duration) {
 /// Append text to the log file and to the pane, or to the held-back buffer while frozen.
 fn append(
     text: &str,
-    log_file: &Option<Arc<Mutex<File>>>,
+    log_file: Option<&mut File>,
     buffer: &Mutex<String>,
     paused_buffer: &Mutex<String>,
     paused: &Mutex<bool>,
 ) {
     if let Some(log_file) = log_file {
-        let _ = log_file.lock().unwrap().write_all(text.as_bytes());
+        let _ = log_file.write_all(text.as_bytes());
     }
 
     if *paused.lock().unwrap() {
