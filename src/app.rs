@@ -239,10 +239,7 @@ impl AppState {
 
     /// Shutdown all nodes and auto-trigger pause
     pub fn shutdown_all_nodes(&mut self, nodes: &[Node]) {
-        // Shutdown all nodes
-        for node in nodes {
-            node.shutdown();
-        }
+        crate::node::stop_all(nodes, std::time::Duration::from_secs(3));
 
         // Auto-trigger pause if not already paused
         if !self.paused {

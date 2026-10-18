@@ -1,11 +1,13 @@
 use anyhow::Result;
-use portable_pty::{CommandBuilder, MasterPty, NativePtySystem, PtySize, PtySystem};
+use portable_pty::{Child, CommandBuilder, MasterPty, NativePtySystem, PtySize, PtySystem};
 use std::{
     fs::{File, OpenOptions},
     io::{Read, Write},
     path::PathBuf,
     process,
     sync::{Arc, Mutex},
+    thread,
+    time::{Duration, Instant},
 };
 use strip_ansi_escapes::strip;
 use tokio::task;
@@ -19,7 +21,7 @@ pub struct Node {
     paused_buffer: Arc<Mutex<String>>,
     current_size: Arc<Mutex<PtySize>>,
     pub paused: Arc<Mutex<bool>>,
-    process_id: Arc<Option<u32>>,
+    child: Option<Mutex<Box<dyn Child + Send + Sync>>>,
 }
 
 impl Node {
@@ -43,7 +45,7 @@ impl Node {
             pixel_height: 0,
         }));
         let paused = Arc::new(Mutex::new(false));
-        let process_id = Arc::new(pair.slave.spawn_command(cmd)?.process_id());
+        let child = Some(Mutex::new(pair.slave.spawn_command(cmd)?));
 
         let node = Node {
             id,
@@ -53,7 +55,7 @@ impl Node {
             paused_buffer,
             current_size,
             paused,
-            process_id,
+            child,
         };
 
         // Start the reader task
@@ -160,7 +162,6 @@ impl Node {
             pixel_height: 0,
         }));
         let paused = Arc::new(Mutex::new(false));
-        let process_id = Arc::new(None);
 
         let node = Node {
             id,
@@ -170,7 +171,7 @@ impl Node {
             paused_buffer,
             current_size,
             paused,
-            process_id,
+            child: None,
         };
 
         // Load log file content
@@ -207,29 +208,59 @@ impl Node {
         paused.clear();
     }
 
-    pub fn shutdown(&self) {
-        // Kill the process using its PID
-        if let Some(pid) = *self.process_id {
-            #[cfg(unix)]
-            {
-                let _ = process::Command::new("kill")
-                    .arg("-TERM")
-                    .arg(pid.to_string())
-                    .output();
-            }
-            #[cfg(windows)]
-            {
-                let _ = process::Command::new("taskkill")
-                    .arg("/PID")
-                    .arg(pid.to_string())
-                    .arg("/F")
-                    .output();
-            }
+    /// Send `sig` (TERM, KILL, STOP, CONT, or 0 to probe) to the node's whole process group,
+    /// so it reaches the client and not just the `sh -c` around it. The pty makes that shell
+    /// a session leader, so its pid is the group id. Returns false if nothing was signalled.
+    pub fn signal(&self, sig: &str) -> bool {
+        let Some(child) = &self.child else {
+            return false;
+        };
+        let mut child = child.lock().unwrap();
+        // Reap the shell if it exited, so a zombie does not count as alive
+        let _ = child.try_wait();
+        let Some(pid) = child.process_id() else {
+            return false;
+        };
+        #[cfg(unix)]
+        {
+            process::Command::new("kill")
+                .arg(format!("-{sig}"))
+                .arg("--")
+                .arg(format!("-{pid}"))
+                .stderr(process::Stdio::null())
+                .status()
+                .is_ok_and(|s| s.success())
         }
+        #[cfg(windows)]
+        {
+            matches!(sig, "TERM" | "KILL")
+                && process::Command::new("taskkill")
+                    .args(["/PID", &pid.to_string(), "/T", "/F"])
+                    .status()
+                    .is_ok_and(|s| s.success())
+        }
+    }
+
+    pub fn shutdown(&self) {
+        self.signal("TERM");
 
         // Add shutdown message to buffer
         let shutdown_msg = format!("\n[Node {} shutdown by user]\n", self.id);
         let mut b = self.buffer.lock().unwrap();
         b.push_str(&shutdown_msg);
+    }
+}
+
+/// TERM every node, give them `grace` to exit, then KILL what is left.
+pub fn stop_all(nodes: &[Node], grace: Duration) {
+    for node in nodes {
+        node.shutdown();
+    }
+    let deadline = Instant::now() + grace;
+    while Instant::now() < deadline && nodes.iter().any(|n| n.signal("0")) {
+        thread::sleep(Duration::from_millis(100));
+    }
+    for node in nodes {
+        node.signal("KILL");
     }
 }
