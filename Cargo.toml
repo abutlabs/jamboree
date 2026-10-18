@@ -1,10 +1,10 @@
 [package]
-name = "jam-ui"
+name = "jamboree"
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Terminal UI for watching the logs of several JAM nodes side by side"
-repository = "https://github.com/jamixir/jam-ui"
+repository = "https://github.com/jamixir/jamboree"
 
 [dependencies]
 ratatui = "0.26"

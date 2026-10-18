@@ -57,7 +57,7 @@ mod tests {
 
     #[test]
     fn find_log_files_sorts_naturally() {
-        let dir = std::env::temp_dir().join(format!("jam-ui-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("jamboree-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         for name in ["node_10.log", "node_2.log", "b.log", "a.log", "notes.txt"] {
             std::fs::write(dir.join(name), "").unwrap();

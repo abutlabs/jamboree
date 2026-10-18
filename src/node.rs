@@ -133,13 +133,13 @@ impl Node {
         });
     }
 
-    /// Write a jam-ui marker line into this node's log and pane, e.g. when a fault starts.
+    /// Write a jamboree marker line into this node's log and pane, e.g. when a fault starts.
     pub fn mark(&self, text: &str) {
         let time = chrono::Local::now().format("%H:%M:%S%.3f");
-        self.note(&format!("\n=== jam-ui {time} {text} ===\n"));
+        self.note(&format!("\n=== jamboree {time} {text} ===\n"));
     }
 
-    /// Append a jam-ui line to this node's log and pane
+    /// Append a jamboree line to this node's log and pane
     fn note(&self, line: &str) {
         let mut log_file = self
             .log_path
@@ -264,7 +264,7 @@ impl Node {
     }
 }
 
-/// Write a jam-ui marker line into every node's log and pane
+/// Write a jamboree marker line into every node's log and pane
 pub fn mark_all(nodes: &[Node], text: &str) {
     nodes.iter().for_each(|n| n.mark(text));
 }

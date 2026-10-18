@@ -3,7 +3,7 @@ use clap::{ArgGroup, Parser};
 use std::time::Duration;
 
 #[derive(Parser, Debug)]
-#[command(name = "jam-ui", term_width = 80, arg_required_else_help = true)]
+#[command(name = "jamboree", term_width = 80, arg_required_else_help = true)]
 #[command(group(ArgGroup::new("source").required(true).args(["cmd", "log_folder"])))]
 pub struct Cli {
     /// Search terms (comma-separated, max 6)
@@ -28,7 +28,7 @@ pub struct Cli {
     #[arg(long, value_name = "PORT", default_value_t = 40000)]
     pub genesis_port: u16,
 
-    /// Move each node off its genesis port to $PORT (also {port}), for clients whose port jam-ui
+    /// Move each node off its genesis port to $PORT (also {port}), for clients whose port jamboree
     /// cannot share; needed by `i` only then
     #[arg(long, conflicts_with = "log_folder")]
     pub move_ports: bool,

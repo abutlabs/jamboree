@@ -56,7 +56,7 @@ fn container_names(cmds: &[String], count: usize) -> Vec<Option<String>> {
         .map(|id| {
             node_template(cmds, id)
                 .contains("{container}")
-                .then(|| format!("jam-ui-{}-{id}", std::process::id()))
+                .then(|| format!("jamboree-{}-{id}", std::process::id()))
         })
         .collect()
 }
