@@ -9,8 +9,7 @@ jamboree starts them all from one command, shows their live logs in one terminal
 saves every log. It can also stop, isolate, split or restart nodes, which is where many of
 the hard bugs show up.
 
-<!-- TODO: demo GIF here (start 6 nodes, freeze, search a block hash, press p to split, heal). Until then: -->
-<img width="2145" height="1179" alt="Six JAM nodes' logs side by side in jamboree" src="https://github.com/user-attachments/assets/29b5ef57-5c6f-46c3-983e-5f387fe8bdec" />
+<img src="assets/demo.gif" alt="jamboree starting six Jamixir nodes, freezing, highlighting State Updated in every pane, splitting the network and healing it">
 
 ```sh
 cargo install --git https://github.com/jamixir/jamboree
