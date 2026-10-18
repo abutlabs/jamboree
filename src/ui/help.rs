@@ -30,7 +30,7 @@ pub fn render(f: &mut Frame) {
   click           Focus a node; click it again to zoom
   Enter / z       Zoom into the focused node
   Esc             Back to the grid / cancel
-  0-9             Hide or show a node
+  1-9             Hide or show the 1st to 9th pane
 
   SCROLL (freezes all panes first)
   ─────────────────────────────────────────────────────

@@ -15,11 +15,12 @@ pub fn find_log_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
     Ok(files)
 }
 
-/// Split an optional `<label>=` prefix (letters, digits, `_`, `-`) off a node command
+/// Split an optional `<label>=` prefix (letters, digits, `_`, `-`) off a node command. An
+/// all-caps prefix such as `RUST_LOG=debug` is an environment variable, not a label
 pub fn split_label(cmd: &str) -> (Option<&str>, &str) {
     match cmd.split_once('=') {
         Some((label, rest))
-            if !label.is_empty()
+            if label.chars().any(|c| c.is_ascii_lowercase())
                 && label.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') =>
         {
             (Some(label), rest)
@@ -53,6 +54,8 @@ mod tests {
         assert_eq!(split_label("./node --port=4000{i}"), (None, "./node --port=4000{i}"));
         assert_eq!(split_label("cd x && a=1 ./n"), (None, "cd x && a=1 ./n"));
         assert_eq!(split_label("=./n"), (None, "=./n"));
+        assert_eq!(split_label("RUST_LOG=debug ./n"), (None, "RUST_LOG=debug ./n"));
+        assert_eq!(split_label("pj2=RUST_LOG=debug ./n"), (Some("pj2"), "RUST_LOG=debug ./n"));
     }
 
     #[test]
