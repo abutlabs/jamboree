@@ -5,11 +5,12 @@ use ratatui::{
 };
 
 use crate::AppState;
+use crate::net::Net;
 use crate::node::Node;
 use crate::ui::highlight::highlight_text;
 use crate::ui::menus;
 use crate::ui::tags;
-pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState) {
+pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState, net: Option<&Net>) {
     let visible: Vec<(usize, &Node)> = nodes
         .iter()
         .enumerate()
@@ -126,7 +127,7 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState) {
                         "{} {}{}",
                         node.label,
                         node_idx,
-                        fault_tags(app, node)
+                        fault_tags(net, node)
                     ))
                     .borders(Borders::ALL)
                     .border_style(if focused == node_idx {
@@ -142,9 +143,9 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState) {
 }
 
 /// Pane title tags for the faults currently applied to a node
-pub fn fault_tags(app: &AppState, node: &Node) -> String {
-    let isolated = app.net.as_ref().is_some_and(|net| net.is_isolated(node.id));
-    let split = app.net.as_ref().and_then(|net| net.split_side(node.id));
+pub fn fault_tags(net: Option<&Net>, node: &Node) -> String {
+    let isolated = net.is_some_and(|net| net.is_isolated(node.id));
+    let split = net.and_then(|net| net.split_side(node.id));
     let mut tags: String = [(node.is_stopped(), " [STOPPED]"), (isolated, " [ISOLATED]")]
         .iter()
         .filter(|(on, _)| *on)

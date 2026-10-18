@@ -5,12 +5,13 @@ use ratatui::{
 };
 
 use crate::AppState;
+use crate::net::Net;
 use crate::node::Node;
 use crate::ui::highlight::highlight_text;
 use crate::ui::menus;
 use crate::ui::tags;
 
-pub fn render(f: &mut Frame, node: &Node, app: &AppState) {
+pub fn render(f: &mut Frame, node: &Node, app: &AppState, net: Option<&Net>) {
     // Layout: menu bar, optional tags bar, content
     let has_tags = app.highlight.is_some() && !app.highlight.as_ref().unwrap().is_empty();
     let constraints = if has_tags {
@@ -100,7 +101,7 @@ pub fn render(f: &mut Frame, node: &Node, app: &AppState) {
                     "{} {} (ZOOM){}{}",
                     node.label,
                     node.id,
-                    super::grid::fault_tags(app, node),
+                    super::grid::fault_tags(net, node),
                     if paused { " [FROZEN]" } else { "" }
                 ))
                 .borders(Borders::ALL)

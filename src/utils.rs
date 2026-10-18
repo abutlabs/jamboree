@@ -1,11 +1,10 @@
 use std::path::{Path, PathBuf};
 
-/// The node logs in a folder: every `*.log` except summary.log, in natural order (node_2 before node_10)
+/// The node logs in a folder: every `*.log`, in natural order (node_2 before node_10)
 pub fn find_log_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
     let mut files: Vec<PathBuf> = std::fs::read_dir(dir)?
         .filter_map(|entry| entry.ok().map(|e| e.path()))
         .filter(|p| p.is_file() && p.extension().is_some_and(|ext| ext == "log"))
-        .filter(|p| p.file_name().is_some_and(|name| name != "summary.log"))
         .collect();
     files.sort_by_cached_key(|p| {
         let stem = p.file_stem().unwrap_or_default().to_string_lossy().into_owned();
@@ -57,10 +56,10 @@ mod tests {
     }
 
     #[test]
-    fn find_log_files_sorts_naturally_and_skips_summary() {
+    fn find_log_files_sorts_naturally() {
         let dir = std::env::temp_dir().join(format!("jam-ui-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        for name in ["node_10.log", "node_2.log", "b.log", "a.log", "summary.log", "notes.txt"] {
+        for name in ["node_10.log", "node_2.log", "b.log", "a.log", "notes.txt"] {
             std::fs::write(dir.join(name), "").unwrap();
         }
         let names: Vec<String> = find_log_files(&dir)
