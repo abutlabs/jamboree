@@ -103,7 +103,7 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState, net
             let text = app.filter_text(&raw_text);
 
             // ---- SCROLL LOGIC (EXACT, NO WRAP) ----
-            let line_count = text.bytes().filter(|&b| b == b'\n').count();
+            let line_count = text.lines().count();
             let max_scroll = line_count.saturating_sub(visible_lines).min(10_000) as u16;
 
             let scroll_y = if app.paused || app.log_viewer_mode {
