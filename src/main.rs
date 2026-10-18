@@ -121,13 +121,7 @@ async fn main() -> Result<()> {
         }
         let count = node_count(&cli.cmd, cli.nodes)?;
         let containers = container_names(&cli.cmd, count);
-        let net = Net::start(
-            cli.genesis_port,
-            count,
-            cli.move_ports,
-            cli.listen_port,
-            containers.clone(),
-        )?;
+        let net = Net::start(&cli, count, containers.clone())?;
         let ports = net.listen_ports();
         let commands = node_commands(&cli.cmd, ports, cli.move_ports, &containers)?;
         for (_, fault) in &cli.fault {

@@ -248,7 +248,7 @@ pub fn handle_key_event(
         KeyCode::Enter | KeyCode::Char('z') => Action::ChangeView(ViewMode::Zoomed),
 
         // Pane visibility toggle: 1 is the first pane
-        KeyCode::Char(c @ '1'..='9') => {
+        KeyCode::Char(c @ '1'..='6') => {
             let idx = (c as usize) - ('1' as usize);
             if idx < nodes.len() {
                 app.hidden[idx] = !app.hidden[idx];
@@ -314,15 +314,16 @@ pub fn handle_mouse_event(
     Action::Continue
 }
 
-/// A time like 90s or 2m
+/// A time like 90s or 2m, or 100ms
 pub fn parse_duration(w: &str) -> Result<Duration, String> {
-    let secs = match w.char_indices().last() {
-        Some((at, 's')) => w[..at].parse().ok(),
-        Some((at, 'm')) => w[..at].parse().ok().map(|m: u64| m * 60),
+    let ms = match w.char_indices().last() {
+        _ if w.ends_with("ms") => w[..w.len() - 2].parse().ok(),
+        Some((at, 's')) => w[..at].parse().ok().map(|s: u64| s * 1000),
+        Some((at, 'm')) => w[..at].parse().ok().map(|m: u64| m * 60_000),
         _ => None,
     };
-    secs.map(Duration::from_secs)
-        .ok_or(format!("'{w}' is not a time like 90s or 2m"))
+    ms.map(Duration::from_millis)
+        .ok_or(format!("'{w}' is not a time like 90s, 2m or 100ms"))
 }
 
 /// A --fault action; split lists the nodes of each side
@@ -426,15 +427,8 @@ impl Fault {
     /// A random schedule for n nodes from `seed`, all healed by `end`: every 20-60s one fault on
     /// a random node or a random split, healed 20-60s later (a restart needs no heal)
     pub fn chaos(seed: u64, n: usize, end: Duration) -> Vec<(Duration, Fault)> {
-        // splitmix64, so a seed gives the same schedule on every machine and version of Rust
         let mut state = seed;
-        let mut next = |below: u64| {
-            state = state.wrapping_add(0x9e3779b97f4a7c15);
-            let mut z = state;
-            z = (z ^ (z >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
-            z = (z ^ (z >> 27)).wrapping_mul(0x94d049bb133111eb);
-            (z ^ (z >> 31)) % below
-        };
+        let mut next = |below: u64| crate::utils::splitmix(&mut state) % below;
         let mut faults = Vec::new();
         let mut at = 0;
         loop {
@@ -486,6 +480,14 @@ impl std::fmt::Display for Fault {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_duration_takes_ms_s_and_m() {
+        assert_eq!(parse_duration("100ms"), Ok(Duration::from_millis(100)));
+        assert_eq!(parse_duration("90s"), Ok(Duration::from_secs(90)));
+        assert_eq!(parse_duration("2m"), Ok(Duration::from_secs(120)));
+        assert!(parse_duration("5").is_err() && parse_duration("ms").is_err());
+    }
 
     #[test]
     fn chaos_is_replayable_and_valid() {

@@ -48,7 +48,7 @@ Every run is saved to `logs/<timestamp>/node_<i>.log`, with the command line in 
 - `Space` freezes all panes at once (the nodes keep running), so you can scroll each one.
 - `/` highlights up to 6 terms in every pane, each in its own colour. Paste a block hash
   to follow it through the network. `n`/`N` jump between matches, `Ctrl+G` hides other lines.
-- `Enter` zooms into the focused pane, `Esc` goes back, `1`-`9` hide or show the 1st to 9th pane.
+- `Enter` zooms into the focused pane, `Esc` goes back, `1`-`6` hide or show the 1st to 6th pane.
 - `--search 'error,warning'` sets the terms at start, also with `--logs`.
 
 ## Break the network
@@ -78,6 +78,9 @@ and unsplit everything). Times look like `90s` or `2m`; no time means at the sta
 `--chaos SEED` adds a random schedule: every 20-60s a stop, isolate, split or restart, healed
 20-60s later. The same seed and node count give the same schedule, and each run saves it as
 `--fault` arguments in `faults.txt`, ready to replay or trim when a run finds a bug.
+
+For a slow or lossy network, `--delay 100ms --jitter 20ms --loss 1` holds back every packet
+between nodes by 80-120ms and drops 1% of them, in each direction, for the whole run.
 
 ## Run in CI
 
@@ -194,7 +197,7 @@ jamboree --nodes 6 --move-ports --listen-port 41000 \
 | --- | --- |
 | `←` `→`, `h` `l`, `Tab`, click | Focus previous / next node |
 | `Enter`, `z`, click the focused pane / `Esc` | Zoom in / back to grid |
-| `1`-`9` | Hide or show the 1st to 9th pane |
+| `1`-`6` | Hide or show the 1st to 6th pane |
 | `↑` `↓`, `j` `k`, PgUp/PgDn, Home/End, `Ctrl+D/U/F/B`, `gg` `G`, wheel | Scroll (freezes all panes first; the wheel scrolls the pane under the pointer) |
 | `Space`, `F` | Freeze / follow the logs again |
 | `/` | Search terms, comma-separated; edit the list to remove one |
