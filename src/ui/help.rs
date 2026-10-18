@@ -21,47 +21,43 @@ pub fn render(f: &mut Frame) {
     f.render_widget(Clear, popup_area);
     
     let help_text = r#"
-                        JAM-UI KEYBINDINGS
-                        ==================
+                        JAMBOREE KEYS
+                        =============
 
-  NAVIGATION (Vi-style)
+  NODES
   ─────────────────────────────────────────────────────
-  j / ↓           Scroll down one line
-  k / ↑           Scroll up one line
-  Ctrl+d          Scroll down half page
-  Ctrl+u          Scroll up half page
-  Ctrl+f / PgDn   Scroll down full page
-  Ctrl+b / PgUp   Scroll up full page
-  G               Go to end of file
-  gg              Go to beginning of file
+  ← → / h l / Tab Focus previous / next node
+  click           Focus a node; click it again to zoom
+  Enter / z       Zoom into the focused node
+  Esc             Back to the grid / cancel
+  0-9             Hide or show a node
 
-  VIEWS & FOCUS
+  SCROLL (freezes all panes first)
   ─────────────────────────────────────────────────────
-  Tab / Shift+Tab Cycle focus between nodes
-  Enter           Zoom into focused node
-  Esc             Return to grid view / Cancel
-  0-9             Toggle node visibility
+  ↑ ↓ / j k       One line
+  PgUp PgDn       One page (also Ctrl+b / Ctrl+f)
+  Ctrl+u Ctrl+d   Half a page
+  Home End        Top / bottom (also gg / G)
+  wheel           Scroll the node under the pointer
+  Space           Freeze / follow the logs again (also F)
 
-  SEARCH & FILTER
+  SEARCH
   ─────────────────────────────────────────────────────
-  /               Enter search mode (comma-separated terms)
-  n               Jump to next search match
-  N               Jump to previous search match
-  Ctrl+g          Toggle grep mode (filter vs highlight)
-  ← →             Navigate between search tags
-  Del / Backspace Remove selected tag
+  /               Search terms, comma-separated (up to 6)
+  n N             Next / previous match
+  Ctrl+g          Only matching lines
 
-  CONTROLS
+  NETWORK (focused node)
   ─────────────────────────────────────────────────────
-  Space           Freeze/unfreeze all panes
-  s               Stop/continue the focused node (SIGSTOP)
-  r               Restart the focused node (kill, run its command again)
-  i               Isolate/heal the focused node
-  p               Split the network at the focused node / heal
-  x               Shutdown all nodes
+  s               Stop / continue (SIGSTOP)
+  i               Isolate / heal
+  p               Split the network here / heal
+  r               Restart
+  x               Shut down all nodes
   q               Quit
-  ?               Toggle this help
+  ?               This help
 
+  Shift+drag selects text while the mouse is on.
                     Press any key to close
 "#;
 

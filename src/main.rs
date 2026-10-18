@@ -15,7 +15,7 @@ use chrono::Local;
 use clap::Parser;
 use crossterm::{
     cursor::{Hide, Show},
-    event::{Event, poll, read},
+    event::{DisableMouseCapture, EnableMouseCapture, Event, poll, read},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -96,7 +96,8 @@ fn node_commands(
 
 pub enum ViewMode {
     Grid,
-    Focused(usize),
+    /// The focused node alone
+    Zoomed,
 }
 
 struct TerminalGuard;
@@ -104,7 +105,7 @@ struct TerminalGuard;
 impl Drop for TerminalGuard {
     fn drop(&mut self) {
         let _ = disable_raw_mode();
-        let _ = execute!(stdout(), LeaveAlternateScreen, Show);
+        let _ = execute!(stdout(), DisableMouseCapture, LeaveAlternateScreen, Show);
     }
 }
 
@@ -347,7 +348,7 @@ async fn run_app(
     mut faults: Vec<(Duration, Fault)>,
 ) -> Result<()> {
     enable_raw_mode()?;
-    execute!(stdout(), EnterAlternateScreen, Hide)?;
+    execute!(stdout(), EnterAlternateScreen, EnableMouseCapture, Hide)?;
     let _guard = TerminalGuard;
 
     let mut view_mode = ViewMode::Grid;
@@ -392,8 +393,8 @@ async fn run_app(
                 ViewMode::Grid => {
                     grid::render(f, &nodes, focused, &app, net.as_ref());
                 }
-                ViewMode::Focused(i) => {
-                    focused::render(f, &nodes[i], &app, net.as_ref());
+                ViewMode::Zoomed => {
+                    focused::render(f, &nodes[focused], &app, net.as_ref());
                 }
             }
             // Render help overlay on top if active
@@ -417,7 +418,7 @@ async fn run_app(
                             node::stop_all(&nodes, Duration::from_secs(3));
                             // Cleanup and exit (process::exit terminates immediately, so guard won't drop)
                             let _ = disable_raw_mode();
-                            let _ = execute!(stdout(), LeaveAlternateScreen, Show);
+                            let _ = execute!(stdout(), DisableMouseCapture, LeaveAlternateScreen, Show);
                             process::exit(0);
                         }
                         Action::ChangeView(new_view) => {
@@ -427,7 +428,11 @@ async fn run_app(
                     }
                 }
                 Event::Mouse(m) => {
-                    handle_mouse_event(m.kind, &mut app, focused);
+                    let zoomed = matches!(view_mode, ViewMode::Zoomed);
+                    let action = handle_mouse_event(m, &mut app, &mut focused, &nodes, zoomed);
+                    if let Action::ChangeView(new_view) = action {
+                        view_mode = new_view;
+                    }
                 }
                 _ => {}
             }

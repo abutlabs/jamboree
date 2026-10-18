@@ -53,7 +53,7 @@ Every run is saved to `logs/<timestamp>/node_<i>.log`, with the command line in 
 
 ## Break the network
 
-This is what a tmux layout or a shell script cannot do. Focus a node with `Tab`, then:
+This is what a tmux layout or a shell script cannot do. Focus a node (arrows or click), then:
 
 | Key | Fault |
 | --- | --- |
@@ -188,18 +188,20 @@ jamboree --nodes 6 --move-ports --listen-port 41000 \
 
 | Key | Action |
 | --- | --- |
-| `Tab` / `Shift+Tab` | Focus next / previous node |
-| `Enter` / `Esc` | Zoom in / back to grid |
+| `←` `→`, `h` `l`, `Tab`, click | Focus previous / next node |
+| `Enter`, `z`, click the focused pane / `Esc` | Zoom in / back to grid |
 | `0`-`9` | Hide or show a pane |
-| `Space` | Freeze or unfreeze all panes |
-| `j` `k` `gg` `G` `Ctrl+D/U/F/B`, arrows, PgUp/PgDn | Scroll |
-| `/` | Search terms (`←` `→` pick a term, `Del` removes it) |
+| `↑` `↓`, `j` `k`, PgUp/PgDn, Home/End, `Ctrl+D/U/F/B`, `gg` `G`, wheel | Scroll (freezes all panes first; the wheel scrolls the pane under the pointer) |
+| `Space`, `F` | Freeze / follow the logs again |
+| `/` | Search terms, comma-separated; edit the list to remove one |
 | `n` / `N` | Next / previous match |
 | `Ctrl+G` | Show only matching lines |
 | `s` `i` `p` `r` | Stop, isolate, split, restart |
 | `x` | Shut down all nodes (TERM, then KILL after 3 s) |
 | `?` | Help |
 | `q` | Quit (stops all nodes first) |
+
+The mouse is on, so to select text hold Shift while dragging.
 
 ## Licence
 

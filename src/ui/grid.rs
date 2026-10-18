@@ -56,6 +56,7 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState, net
     // ---- GRID ----
     let grid_area = if has_tags { layout[2] } else { layout[1] };
 
+    app.panes.borrow_mut().clear();
     let count = visible.len();
     let cols = (count as f64).sqrt().ceil() as usize;
     let rows = (count + cols - 1) / cols;
@@ -81,6 +82,7 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState, net
 
             let (node_idx, node) = visible[idx];
             let area = col_chunks[c];
+            app.panes.borrow_mut().push((node_idx, area));
 
             // ---- RESIZE PTY (ONLY IF CHANGED) ----
             let new_size = PtySize {
