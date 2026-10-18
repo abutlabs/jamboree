@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Panes show the client's own log colours; saved logs, search and `--head` still use plain text.
+- Fix: with `Ctrl+G`, a full pane hid its newest matching line.
 
 ## 0.2.0
 
