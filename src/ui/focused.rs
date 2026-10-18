@@ -57,7 +57,7 @@ pub fn render(f: &mut Frame, node: &Node, app: &AppState, net: Option<&Net>) {
     let visible_lines = area.height.saturating_sub(2) as usize; // borders
     let available_width = area.width.saturating_sub(2).max(1) as usize;
 
-    let raw_text = node.get_text_tail(5_000_000);
+    let raw_text = node.get_colored_tail(5_000_000);
 
     // Apply grep filter if enabled
     let text = app.filter_text(&raw_text);
@@ -67,7 +67,7 @@ pub fn render(f: &mut Frame, node: &Node, app: &AppState, net: Option<&Net>) {
     let total_wrapped_lines: usize = text
         .lines()
         .map(|line| {
-            let line_len = line.chars().count();
+            let line_len = strip_ansi_escapes::strip_str(line).chars().count();
             if line_len == 0 {
                 1
             } else {

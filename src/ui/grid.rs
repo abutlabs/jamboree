@@ -97,7 +97,7 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState, net
 
             // Extract tail text
             let visible_lines = area.height.saturating_sub(2) as usize;
-            let raw_text = node.get_text_tail(5_000_000);
+            let raw_text = node.get_colored_tail(5_000_000);
 
             // Apply grep filter if enabled
             let text = app.filter_text(&raw_text);

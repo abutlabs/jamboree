@@ -17,3 +17,4 @@ regex = "1"
 chrono = "0.4"
 clap = { version = "4", features = ["derive", "wrap_help"] }
 socket2 = { version = "0.6", features = ["all"] }
+ansi-to-tui = "4"

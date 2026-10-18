@@ -295,10 +295,12 @@ impl AppState {
             return text.to_string();
         }
 
+        // Match the text without colours, which can split a term
         text.lines()
             .filter(|line| {
+                let plain = strip_ansi_escapes::strip_str(line);
                 terms.iter().any(|(term, _)| {
-                    !term.is_empty() && line.contains(term.as_str())
+                    !term.is_empty() && plain.contains(term.as_str())
                 })
             })
             .collect::<Vec<_>>()

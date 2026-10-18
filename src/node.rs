@@ -12,7 +12,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use strip_ansi_escapes::strip;
+use strip_ansi_escapes::strip_str;
 use tokio::task;
 
 pub struct Node {
@@ -107,6 +107,8 @@ impl Node {
 
         task::spawn_blocking(move || {
             let mut buf = [0u8; 4096];
+            // Bytes of an escape sequence or character cut off at the end of a read
+            let mut held = Vec::new();
 
             loop {
                 let (text, ended) = match reader.read(&mut buf) {
@@ -117,9 +119,11 @@ impl Node {
                         format!("\n[Node {id} connection error - process may have crashed]\n"),
                         true,
                     ),
-                    // Strip ANSI codes for both log file and UI (clean text in logs, no escape codes)
                     Ok(n) => {
-                        let text = String::from_utf8_lossy(&strip(&buf[..n])).replace('\r', "");
+                        held.extend_from_slice(&buf[..n]);
+                        let whole = complete_prefix(&held);
+                        let text = keep_colors(&String::from_utf8_lossy(&held[..whole]));
+                        held.drain(..whole);
                         (text, false)
                     }
                 };
@@ -205,7 +209,13 @@ impl Node {
         Ok(node)
     }
 
+    /// The last `max_bytes` of the pane's text, without colours
     pub fn get_text_tail(&self, max_bytes: usize) -> String {
+        strip_str(self.get_colored_tail(max_bytes))
+    }
+
+    /// The last `max_bytes` of the pane's text, with the client's colours (SGR sequences)
+    pub fn get_colored_tail(&self, max_bytes: usize) -> String {
         let b = self.buffer.lock().unwrap();
         let len = b.len();
 
@@ -330,7 +340,45 @@ fn docker(args: &[&str]) -> bool {
         .is_ok_and(|s| s.success())
 }
 
-/// Append text to the log file and to the pane, or to the held-back buffer while frozen.
+/// The node's output for its pane: colours (SGR sequences) kept, other escapes and \r removed
+fn keep_colors(text: &str) -> String {
+    static SGR: std::sync::LazyLock<regex::Regex> =
+        std::sync::LazyLock::new(|| regex::Regex::new("\x1b\\[[0-9;]*m").unwrap());
+    let mut out = String::new();
+    let mut last = 0;
+    for sgr in SGR.find_iter(text) {
+        out += &strip_str(&text[last..sgr.start()]);
+        out += sgr.as_str();
+        last = sgr.end();
+    }
+    out += &strip_str(&text[last..]);
+    out.replace('\r', "")
+}
+
+/// Length of `bytes` without a trailing escape sequence or UTF-8 character that the next read
+/// completes
+fn complete_prefix(bytes: &[u8]) -> usize {
+    let mut end = match std::str::from_utf8(bytes) {
+        Err(e) if e.error_len().is_none() => e.valid_up_to(),
+        _ => bytes.len(),
+    };
+    if let Some(esc) = bytes[..end].iter().rposition(|&b| b == 0x1b) {
+        // CSI ends with a byte in @..~; a lone ESC or an unfinished CSI waits (up to 64 bytes)
+        let rest = &bytes[esc + 1..end];
+        let open = match rest.first() {
+            None => true,
+            Some(b'[') => !rest[1..].iter().any(|b| (0x40..=0x7e).contains(b)),
+            _ => false,
+        };
+        if open && end - esc < 64 {
+            end = esc;
+        }
+    }
+    end
+}
+
+/// Append text to the log file without colours, and to the pane, or to the held-back buffer
+/// while frozen.
 fn append(
     text: &str,
     log_file: Option<&mut File>,
@@ -339,7 +387,7 @@ fn append(
     paused: &Mutex<bool>,
 ) {
     if let Some(log_file) = log_file {
-        let _ = log_file.write_all(text.as_bytes());
+        let _ = log_file.write_all(strip_str(text).as_bytes());
     }
 
     if *paused.lock().unwrap() {
@@ -358,5 +406,25 @@ fn append(
             .find(|&i| b.is_char_boundary(i))
             .unwrap_or(0);
         b.drain(..safe_drain);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn keep_colors_drops_other_escapes() {
+        let out = keep_colors("\x1b[2K\x1b[32m[info]\x1b[0m ok\r\n\x1b]0;title\x07next\n");
+        assert_eq!(out, "\x1b[32m[info]\x1b[0m ok\nnext\n");
+    }
+
+    #[test]
+    fn complete_prefix_holds_back_cut_sequences() {
+        assert_eq!(complete_prefix(b"ab\x1b[3"), 2);
+        assert_eq!(complete_prefix(b"ab\x1b"), 2);
+        assert_eq!(complete_prefix(b"ab\x1b[32m"), 7);
+        assert_eq!(complete_prefix("ab\u{e9}".as_bytes()), 4);
+        assert_eq!(complete_prefix(&"ab\u{e9}".as_bytes()[..3]), 2);
     }
 }
