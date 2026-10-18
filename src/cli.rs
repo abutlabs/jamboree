@@ -20,4 +20,9 @@ pub struct Cli {
     /// Number of nodes to start (default 6, or one per --cmd); with --logs, number of files to load (default all)
     #[arg(long)]
     pub nodes: Option<usize>,
+
+    /// Run the nodes in a private network so `i` can cut one off (Linux; re-runs jam-ui under
+    /// `systemd-run --user --scope unshare -Urn`)
+    #[arg(long, conflicts_with = "log_folder")]
+    pub net_faults: bool,
 }

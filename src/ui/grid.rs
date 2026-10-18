@@ -126,7 +126,7 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState) {
                         "{} {}{}",
                         node.label,
                         node_idx,
-                        if node.is_stopped() { " [STOPPED]" } else { "" }
+                        fault_tags(app, node)
                     ))
                     .borders(Borders::ALL)
                     .border_style(if focused == node_idx {
@@ -139,4 +139,14 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState) {
             f.render_widget(widget, area);
         }
     }
+}
+
+/// Pane title tags for the faults currently applied to a node
+pub fn fault_tags(app: &AppState, node: &Node) -> String {
+    let isolated = app.net.as_ref().is_some_and(|net| net.is_isolated(node.id));
+    [(node.is_stopped(), " [STOPPED]"), (isolated, " [ISOLATED]")]
+        .iter()
+        .filter(|(on, _)| *on)
+        .map(|(_, tag)| *tag)
+        .collect()
 }

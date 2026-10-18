@@ -70,6 +70,22 @@ keys and bootnode flags differ per client; the PolkaJam part runs as written.
 
 Tried with PolkaJam, Typeberry, SpaceJam and Jamixir dev networks.
 
+### Network faults (Linux)
+
+`--net-faults` runs the nodes in a private network, so `i` can cut the focused node off from
+all the others and heal it again. Packets are dropped silently in both directions, like a
+broken link, and nothing in the client changes; every log gets a marker line.
+
+```sh
+jam-ui --net-faults --nodes 6 --cmd 'cd ~/src/jamixir && ./node.sh {i}'
+```
+
+jam-ui re-runs itself under `systemd-run --user --scope unshare -Urn` (no root needed): each
+node gets its own cgroup and nftables drops packets between nodes in different groups. The
+nodes see only loopback, so they must find each other on 127.0.0.1 / ::1, and Docker-started
+nodes are out of reach. Linux only (needs `systemd-run`, `unshare`, `ip`, `nft`); on macOS
+use a Linux VM.
+
 ### Search and log viewer
 
 ```bash
@@ -98,6 +114,7 @@ jam-ui --logs logs/20260111_161505 --search "error,warning"
 - **`Space`** - Freeze/unfreeze all panes (enables scrolling; the nodes keep running)
 - **`S`** - Stop/continue the focused node (SIGSTOP/SIGCONT to its process group). The
   node stays connected but goes silent, then wakes up behind. Every log gets a marker line
+- **`I`** - Isolate/heal the focused node (needs `--net-faults`)
 - **`X`** - Shutdown all nodes: TERM, then KILL after 3 s (auto-freezes, allows viewing logs)
 - **`Enter`** - Zoom into focused node
 - **`Esc`** - Return to grid view

@@ -16,3 +16,5 @@
   client outlives jam-ui.
 - `s` stops/continues the focused node (SIGSTOP/SIGCONT) and writes a marker line into
   every node's log. `Space` is now called freeze, since the nodes keep running.
+- `--net-faults` (Linux) runs the nodes in a private network; `i` cuts the focused node off
+  from the others and heals it, without changing the client.

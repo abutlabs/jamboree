@@ -8,7 +8,7 @@ pub fn render(f: &mut Frame) {
     
     // Create a centered popup
     let popup_width = 70.min(area.width.saturating_sub(4));
-    let popup_height = 32.min(area.height.saturating_sub(2));
+    let popup_height = 44.min(area.height.saturating_sub(2));
     
     let popup_area = Rect {
         x: (area.width - popup_width) / 2,
@@ -55,6 +55,7 @@ pub fn render(f: &mut Frame) {
   ─────────────────────────────────────────────────────
   Space           Freeze/unfreeze all panes
   s               Stop/continue the focused node (SIGSTOP)
+  i               Isolate/heal the focused node (--net-faults)
   x               Shutdown all nodes
   q               Quit
   ?               Toggle this help

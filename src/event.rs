@@ -223,6 +223,22 @@ pub fn handle_key_event(
             Action::Continue
         }
 
+        // Cut the focused node off from all others, or heal it (needs --net-faults)
+        KeyCode::Char('i') if !app.log_viewer_mode => {
+            let node = &nodes[*focused];
+            match app.net.as_mut().map(|net| net.toggle_isolated(*focused)) {
+                Some(Ok(isolated)) => {
+                    let what = if isolated { "isolated" } else { "healed" };
+                    for n in nodes {
+                        n.mark(&format!("{} {} {}", node.label, node.id, what));
+                    }
+                }
+                Some(Err(e)) => node.mark(&format!("isolate failed: {e:#}")),
+                None => node.mark("isolate needs jam-ui --net-faults"),
+            }
+            Action::Continue
+        }
+
         // Shutdown
         KeyCode::Char('x') if !app.log_viewer_mode => {
             app.shutdown_all_nodes(nodes);
