@@ -53,7 +53,7 @@ Every run is saved to `logs/<timestamp>/node_<i>.log`, with the command line in 
 
 ## Break the network
 
-This is what a tmux layout or a shell script cannot do. Focus a node with `Tab`, then:
+This is what a tmux layout or a shell script cannot do. Focus a node (arrows or click), then:
 
 | Key | Fault |
 | --- | --- |
@@ -74,6 +74,34 @@ jamboree --nodes 6 --cmd '...' \
 
 Actions: `stop N`, `isolate N`, `split A/B`, `restart N`, and `heal` (continue, un-isolate
 and unsplit everything). Times look like `90s` or `2m`; no time means at the start.
+
+## Run in CI
+
+`--headless DURATION` runs the same network without the UI, then stops the nodes. With
+`--head`, it checks that every node ended on the same head and exits 1 if not:
+
+```sh
+jamboree --nodes 6 --cmd 'cd ~/src/jamixir && ./node.sh {i}' \
+  --fault '60s split 0,1,2,3/4,5' --fault '120s heal' \
+  --headless 3m --head 'State Updated successfully\. H: (0x[0-9a-f]{64})'
+```
+
+The head is what the regex's first group captures in each node's last matching log line.
+After DURATION, jamboree waits up to `--timeout` (default 60s) for all nodes to agree, then
+prints either the head or which nodes are on which. Stopped nodes are left out. For a mixed
+network, give each client its own regex with a label: `--head 'polkajam=Imported (0x[0-9a-f]+)'`.
+Clients shorten hashes differently, so there capture something they print alike, such as the slot.
+
+<details>
+<summary>Head regexes for some clients</summary>
+
+| Client | `--head` |
+| --- | --- |
+| Jamixir | `State Updated successfully\. H: (0x[0-9a-f]{64})` |
+| PolkaJam | `Imported (0x[0-9a-f]+)` |
+| JAM DUNA | `(?:Imported\|Authored) Block".* h=(\S+)` |
+| PBnJam | `"blockHash":"(0x[0-9a-f]+)` |
+</details>
 
 ## Recipes
 
@@ -160,18 +188,20 @@ jamboree --nodes 6 --move-ports --listen-port 41000 \
 
 | Key | Action |
 | --- | --- |
-| `Tab` / `Shift+Tab` | Focus next / previous node |
-| `Enter` / `Esc` | Zoom in / back to grid |
+| `←` `→`, `h` `l`, `Tab`, click | Focus previous / next node |
+| `Enter`, `z`, click the focused pane / `Esc` | Zoom in / back to grid |
 | `0`-`9` | Hide or show a pane |
-| `Space` | Freeze or unfreeze all panes |
-| `j` `k` `gg` `G` `Ctrl+D/U/F/B`, arrows, PgUp/PgDn | Scroll |
-| `/` | Search terms (`←` `→` pick a term, `Del` removes it) |
+| `↑` `↓`, `j` `k`, PgUp/PgDn, Home/End, `Ctrl+D/U/F/B`, `gg` `G`, wheel | Scroll (freezes all panes first; the wheel scrolls the pane under the pointer) |
+| `Space`, `F` | Freeze / follow the logs again |
+| `/` | Search terms, comma-separated; edit the list to remove one |
 | `n` / `N` | Next / previous match |
 | `Ctrl+G` | Show only matching lines |
 | `s` `i` `p` `r` | Stop, isolate, split, restart |
 | `x` | Shut down all nodes (TERM, then KILL after 3 s) |
 | `?` | Help |
 | `q` | Quit (stops all nodes first) |
+
+The mouse is on, so to select text hold Shift while dragging.
 
 ## Licence
 

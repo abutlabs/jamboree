@@ -1,4 +1,4 @@
-use crate::event::Fault;
+use crate::event::{Fault, parse_duration};
 use clap::{ArgGroup, Parser};
 use std::time::Duration;
 
@@ -42,4 +42,19 @@ pub struct Cli {
     /// 0,1,2/3,4,5), restart N, heal (continue, un-isolate and unsplit all). Repeatable
     #[arg(long, value_name = "FAULT", value_parser = Fault::parse, conflicts_with = "log_folder")]
     pub fault: Vec<(Duration, Fault)>,
+
+    /// Run without the UI for DURATION (e.g. 5m), for CI and scripts; then stop the nodes, print
+    /// a summary and exit 0, or 1 when --head finds them on different heads
+    #[arg(long, value_name = "DURATION", value_parser = parse_duration, conflicts_with = "log_folder")]
+    pub headless: Option<Duration>,
+
+    /// With --headless, check at the end that all nodes are on the same head: the first group
+    /// that REGEX captures in each node's last matching log line. Prefix `<label>=` to apply it
+    /// to that --cmd label's nodes only. Repeatable
+    #[arg(long, value_name = "[LABEL=]REGEX", requires = "headless")]
+    pub head: Vec<String>,
+
+    /// How long --head waits for the nodes to agree after DURATION
+    #[arg(long, value_name = "DURATION", value_parser = parse_duration, default_value = "60s", requires = "head")]
+    pub timeout: Duration,
 }

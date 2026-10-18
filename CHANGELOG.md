@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- `--headless DURATION` runs without the UI and exits when done; `--head '[label=]REGEX'`
+  checks that all nodes ended on the same head (exit 1 if not), waiting up to `--timeout`.
+- Arrows and the mouse: `←` `→` (and `h` `l`) move focus, `↑` `↓` PgUp/PgDn Home/End scroll
+  and freeze like the vi keys, click focuses, a second click or `z` zooms, the wheel scrolls
+  the pane under the pointer, `F` follows again. Search terms are removed by editing `/`.
+
 ## 0.1.0
 
 - Watch the logs of several JAM nodes side by side: pause all panes at once, scroll each

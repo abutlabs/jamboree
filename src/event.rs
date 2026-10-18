@@ -2,8 +2,9 @@ use crate::AppState;
 use crate::ViewMode;
 use crate::net::Net;
 use crate::node::{self, Node};
-use crossterm::event::{KeyCode, KeyModifiers, MouseEventKind};
-use std::time::Duration;
+use crossterm::event::{KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use ratatui::layout::Position;
+use std::time::{Duration, Instant};
 
 pub enum Action {
     Continue,
@@ -32,28 +33,6 @@ pub fn handle_key_event(
         return Action::Continue;
     }
 
-    // Handle tag navigation if tags exist
-    if app.highlight.is_some() && !app.highlight.as_ref().unwrap().is_empty() {
-        match key {
-            KeyCode::Left => {
-                app.select_prev_tag();
-                app.last_key = None;
-                return Action::Continue;
-            }
-            KeyCode::Right => {
-                app.select_next_tag();
-                app.last_key = None;
-                return Action::Continue;
-            }
-            KeyCode::Delete | KeyCode::Backspace => {
-                app.remove_selected_tag();
-                app.last_key = None;
-                return Action::Continue;
-            }
-            _ => {}
-        }
-    }
-
     // Check if scrolling is allowed (paused or log viewer mode)
     let can_scroll = app.paused || app.log_viewer_mode;
     let ctrl = modifiers.contains(KeyModifiers::CONTROL);
@@ -64,6 +43,8 @@ pub fn handle_key_event(
         KeyCode::Char('G' | 'j' | 'k') => true,
         KeyCode::Char('d' | 'u' | 'f' | 'b') => ctrl,
         KeyCode::Char('n' | 'N') => app.highlight.is_some(),
+        KeyCode::Up | KeyCode::Down | KeyCode::PageUp | KeyCode::PageDown => true,
+        KeyCode::Home | KeyCode::End => true,
         _ => false,
     };
     if vi_scroll && !can_scroll {
@@ -171,26 +152,38 @@ pub fn handle_key_event(
             Action::Continue
         }
 
-        // Arrow keys and Page keys (existing)
-        KeyCode::Up if can_scroll => {
+        // Arrow, page, Home and End keys scroll, like the vi keys
+        KeyCode::Up => {
             app.scroll_delta(*focused, -1);
             Action::Continue
         }
-        KeyCode::Down if can_scroll => {
+        KeyCode::Down => {
             app.scroll_delta(*focused, 1);
             Action::Continue
         }
-        KeyCode::PageUp if can_scroll => {
+        KeyCode::PageUp => {
             app.scroll_full_page(*focused, false);
             Action::Continue
         }
-        KeyCode::PageDown if can_scroll => {
+        KeyCode::PageDown => {
             app.scroll_full_page(*focused, true);
             Action::Continue
         }
+        KeyCode::Home => {
+            app.scroll_to_top(*focused);
+            Action::Continue
+        }
+        KeyCode::End => {
+            app.scroll_to_bottom(*focused);
+            Action::Continue
+        }
 
-        // Freeze/unfreeze all panes
+        // Freeze/unfreeze all panes; F follows the logs again, as in less
         KeyCode::Char(' ') if !app.log_viewer_mode => {
+            app.toggle_pause(nodes);
+            Action::Continue
+        }
+        KeyCode::Char('F') if app.paused && !app.log_viewer_mode => {
             app.toggle_pause(nodes);
             Action::Continue
         }
@@ -241,18 +234,18 @@ pub fn handle_key_event(
         // Quit
         KeyCode::Char('q') => Action::Quit,
 
-        // Focus navigation
-        KeyCode::Tab => {
+        // Focus the next or previous node
+        KeyCode::Tab | KeyCode::Right | KeyCode::Char('l') => {
             *focused = (*focused + 1) % nodes.len();
             Action::Continue
         }
-        KeyCode::BackTab => {
+        KeyCode::BackTab | KeyCode::Left | KeyCode::Char('h') => {
             *focused = (*focused + nodes.len() - 1) % nodes.len();
             Action::Continue
         }
 
         // Zoom
-        KeyCode::Enter => Action::ChangeView(ViewMode::Focused(*focused)),
+        KeyCode::Enter | KeyCode::Char('z') => Action::ChangeView(ViewMode::Zoomed),
 
         // Node visibility toggle
         KeyCode::Char(c @ '0'..='9') => {
@@ -277,22 +270,59 @@ pub fn handle_key_event(
     action
 }
 
-pub fn handle_mouse_event(mouse: MouseEventKind, app: &mut AppState, focused: usize) -> Action {
+/// Click focuses a pane and a second click on it zooms; the wheel scrolls the pane under the
+/// pointer, freezing the panes first
+pub fn handle_mouse_event(
+    mouse: MouseEvent,
+    app: &mut AppState,
+    focused: &mut usize,
+    nodes: &[Node],
+    zoomed: bool,
+) -> Action {
+    let under = (app.panes.borrow().iter())
+        .find(|(_, r)| r.contains(Position::new(mouse.column, mouse.row)))
+        .map(|(i, _)| *i);
+    let scroll = match mouse.kind {
+        MouseEventKind::ScrollUp => -3,
+        MouseEventKind::ScrollDown => 3,
+        MouseEventKind::Down(MouseButton::Left) if !zoomed => {
+            let Some(i) = under else {
+                return Action::Continue;
+            };
+            let double = app.last_click.is_some_and(|(j, at)| {
+                j == i && at.elapsed() < Duration::from_millis(400)
+            });
+            *focused = i;
+            app.last_click = Some((i, Instant::now()));
+            return match double {
+                true => Action::ChangeView(ViewMode::Zoomed),
+                false => Action::Continue,
+            };
+        }
+        _ => return Action::Continue,
+    };
+    if !zoomed {
+        match under {
+            Some(i) => *focused = i,
+            None => return Action::Continue,
+        }
+    }
     if !app.paused && !app.log_viewer_mode {
-        return Action::Continue;
+        app.toggle_pause(nodes);
     }
-
-    match mouse {
-        MouseEventKind::ScrollUp => {
-            app.scroll_delta(focused, -3);
-        }
-        MouseEventKind::ScrollDown => {
-            app.scroll_delta(focused, 3);
-        }
-        _ => {}
-    }
-
+    app.scroll_delta(*focused, scroll);
     Action::Continue
+}
+
+/// A time like 90s or 2m
+pub fn parse_duration(w: &str) -> Result<Duration, String> {
+    let secs = match w.char_indices().last() {
+        Some((at, 's')) => w[..at].parse().ok(),
+        Some((at, 'm')) => w[..at].parse().ok().map(|m: u64| m * 60),
+        _ => None,
+    };
+    secs.map(Duration::from_secs)
+        .ok_or(format!("'{w}' is not a time like 90s or 2m"))
 }
 
 /// A --fault action; split lists the nodes of each side
@@ -309,15 +339,10 @@ impl Fault {
     /// Parse `[<time>] <action>`, e.g. `60s split 0,1,2/3,4,5`; no time means at the start
     pub fn parse(s: &str) -> Result<(Duration, Fault), String> {
         let mut words: Vec<&str> = s.split_whitespace().collect();
-        let time = |w: &str| match w.char_indices().last() {
-            Some((at, 's')) => w[..at].parse().ok(),
-            Some((at, 'm')) => w[..at].parse().ok().map(|m: u64| m * 60),
-            _ => None,
-        };
-        let at = match words.first().and_then(|w| time(w)) {
-            Some(secs) => {
+        let at = match words.first().and_then(|w| parse_duration(w).ok()) {
+            Some(at) => {
                 words.remove(0);
-                Duration::from_secs(secs)
+                at
             }
             None => Duration::ZERO,
         };

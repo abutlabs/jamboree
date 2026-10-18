@@ -15,19 +15,9 @@ pub fn render_tags(f: &mut Frame, area: Rect, app: &AppState) {
             Style::default().fg(Color::White).bg(Color::DarkGray),
         ));
 
-        for (idx, (term, color_idx)) in terms.iter().enumerate() {
+        for (term, color_idx) in terms {
             let (fg, bg) = COLORS[(*color_idx).min(5)];
-            let is_selected = app.selected_tag == Some(idx);
-
-            // Highlight selected tag with a border effect
-            let tag_style = if is_selected {
-                Style::default()
-                    .fg(fg)
-                    .bg(bg)
-                    .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
-            } else {
-                Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD)
-            };
+            let tag_style = Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD);
 
             // Tag format: [term]
             spans.push(Span::styled(format!(" [{}] ", term), tag_style));

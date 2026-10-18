@@ -1,5 +1,7 @@
 use crossterm::event::KeyCode;
+use ratatui::layout::Rect;
 use std::cell::RefCell;
+use std::time::Instant;
 use std::collections::HashMap;
 
 use crate::node::Node;
@@ -13,10 +15,13 @@ pub struct AppState {
     pub search_mode: bool,
     pub search_input: String,
     pub highlight: Option<Vec<(String, usize)>>, // Multiple search terms with color index (max 6)
-    pub selected_tag: Option<usize>, // Currently selected tag index for keyboard navigation
     pub grep_mode: bool, // true to filter lines (grep), false to only highlight
     pub show_help: bool, // true to display help overlay
     pub last_key: Option<char>, // Track last key for vi commands like 'gg'
+    /// Where each pane was drawn, by node index, for the mouse
+    pub panes: RefCell<Vec<(usize, Rect)>>,
+    /// Node and time of the last click, to tell a double click
+    pub last_click: Option<(usize, Instant)>,
 }
 
 impl AppState {
@@ -91,11 +96,6 @@ impl AppState {
         // Process CLI search string to create highlight tags
         let highlight = Self::apply_search(&search_input, None);
 
-        let selected_tag = if highlight.is_some() && !highlight.as_ref().unwrap().is_empty() {
-            Some(0)
-        } else {
-            None
-        };
 
         Self {
             paused: false,
@@ -105,21 +105,17 @@ impl AppState {
             search_input,
             highlight,
             hidden: vec![false; node_count],
-            selected_tag,
             grep_mode: false,
             show_help: false,
             last_key: None,
+            panes: RefCell::new(Vec::new()),
+            last_click: None,
         }
     }
 
     pub fn new_log_viewer(node_count: usize, search: Option<String>) -> Self {
         let search_input = search.unwrap_or_default();
         let highlight = Self::apply_search(&search_input, None);
-        let selected_tag = if highlight.is_some() && !highlight.as_ref().unwrap().is_empty() {
-            Some(0)
-        } else {
-            None
-        };
 
         Self {
             paused: false, // Not used in log viewer mode
@@ -129,10 +125,11 @@ impl AppState {
             search_input,
             highlight,
             hidden: vec![false; node_count],
-            selected_tag,
             grep_mode: false,
             show_help: false,
             last_key: None,
+            panes: RefCell::new(Vec::new()),
+            last_click: None,
         }
     }
 
@@ -144,12 +141,6 @@ impl AppState {
             }
             KeyCode::Enter => {
                 self.highlight = Self::apply_search(&self.search_input, self.highlight.as_ref());
-                // Initialize selected tag to first tag when tags are created
-                if self.highlight.is_some() && !self.highlight.as_ref().unwrap().is_empty() {
-                    self.selected_tag = Some(0);
-                } else {
-                    self.selected_tag = None;
-                }
                 self.search_mode = false;
             }
             KeyCode::Backspace => {
@@ -187,54 +178,6 @@ impl AppState {
         let mut scroll = self.frozen_scroll.borrow_mut();
         let next = (scroll[idx] as i16 + delta).max(0).min(10000i16);
         scroll[idx] = next as u16;
-    }
-
-    pub fn remove_tag(&mut self, index: usize) {
-        if let Some(ref mut terms) = self.highlight {
-            if index < terms.len() {
-                terms.remove(index);
-                if terms.is_empty() {
-                    self.highlight = None;
-                    self.selected_tag = None;
-                } else {
-                    // Adjust selected tag index if needed
-                    if let Some(ref mut selected) = self.selected_tag {
-                        if *selected >= terms.len() {
-                            *selected = terms.len().saturating_sub(1);
-                        }
-                        if *selected > index {
-                            *selected -= 1;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn select_next_tag(&mut self) {
-        if let Some(ref terms) = self.highlight {
-            if !terms.is_empty() {
-                let current = self.selected_tag.unwrap_or(0);
-                self.selected_tag = Some((current + 1) % terms.len());
-            }
-        }
-    }
-
-    pub fn select_prev_tag(&mut self) {
-        if let Some(ref terms) = self.highlight {
-            if !terms.is_empty() {
-                let current = self.selected_tag.unwrap_or(0);
-                let len = terms.len();
-                self.selected_tag = Some((current + len - 1) % len);
-            }
-        }
-    }
-
-    pub fn remove_selected_tag(&mut self) {
-        if let Some(idx) = self.selected_tag {
-            self.remove_tag(idx);
-            // After removal, selected_tag is adjusted by remove_tag
-        }
     }
 
     /// Shutdown all nodes and auto-trigger pause
