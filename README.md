@@ -92,6 +92,15 @@ it must listen on `::`). Then `i` says so, and `--move-ports` is the fallback: e
 told to listen on another port, given as `$PORT` and `{port}`, which you pass to the client's
 listen-port flag (`--listen-port P` fixes them to `P+i`), and jam-ui takes the genesis ports.
 
+PolkaJam always listens on its genesis port and cannot share it; give it another loopback
+address instead (Linux; on macOS add it once with `sudo ifconfig lo0 alias 127.0.0.2`). If
+it fails with `failed to create an userfaultfd`, add `--pvm-backend interpreter`:
+
+```sh
+jam-ui --nodes 6 --cmd 'polkajam=polkajam --chain dev run --pvm-backend interpreter --temp \
+  --dev-validator {i} --listen-ip 127.0.0.2 --rpc-port $((19800+{i}))'
+```
+
 ### Search and log viewer
 
 ```bash
