@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
 - `--headless DURATION` runs without the UI and exits when done; `--head '[label=]REGEX'`
   checks that all nodes ended on the same head (exit 1 if not), waiting up to `--timeout`.
