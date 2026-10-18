@@ -145,6 +145,15 @@ On Linux the client must set `SO_REUSEPORT`; on macOS it must listen on `::`. If
 not, `i` says so. Then run with `--move-ports`: each node gets another port as `$PORT` and
 `{port}`, which you pass to the client's listen-port flag (`--listen-port P` makes it `P+i`).
 jamboree takes the genesis ports.
+
+```sh
+# peers still dial node i on 40000+i; jamboree relays to the port the node listens on
+jamboree --nodes 6 --move-ports --cmd './my-jam-node --dev-validator {i} --port {port}'
+
+# the same, with node i listening on 41000+i
+jamboree --nodes 6 --move-ports --listen-port 41000 \
+  --cmd './my-jam-node --dev-validator {i} --port {port}'
+```
 </details>
 
 ## Keys
