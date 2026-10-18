@@ -48,7 +48,7 @@ Every run is saved to `logs/<timestamp>/node_<i>.log`, with the command line in 
 - `Space` freezes all panes at once (the nodes keep running), so you can scroll each one.
 - `/` highlights up to 6 terms in every pane, each in its own colour. Paste a block hash
   to follow it through the network. `n`/`N` jump between matches, `Ctrl+G` hides other lines.
-- `Enter` zooms into the focused pane, `Esc` goes back, `0`-`9` hide or show a pane.
+- `Enter` zooms into the focused pane, `Esc` goes back, `1`-`9` hide or show the 1st to 9th pane.
 - `--search 'error,warning'` sets the terms at start, also with `--logs`.
 
 ## Break the network
@@ -141,7 +141,7 @@ jamboree --cmd "$PJ" --cmd "$PJ" --cmd "$PJ" --cmd "$PJ" \
 ```
 
 Panes are titled `polkajam 0` to `polkajam 3` and `mine 4`. Your client's flags will
-differ. A command that starts with `NAME=value` needs a label or `env` in front.
+differ. An all-caps `NAME=value` at the start, like `RUST_LOG=debug`, is a variable; a lowercase one is read as a label, so put `env` in front.
 </details>
 
 <details>
@@ -190,7 +190,7 @@ jamboree --nodes 6 --move-ports --listen-port 41000 \
 | --- | --- |
 | `←` `→`, `h` `l`, `Tab`, click | Focus previous / next node |
 | `Enter`, `z`, click the focused pane / `Esc` | Zoom in / back to grid |
-| `0`-`9` | Hide or show a pane |
+| `1`-`9` | Hide or show the 1st to 9th pane |
 | `↑` `↓`, `j` `k`, PgUp/PgDn, Home/End, `Ctrl+D/U/F/B`, `gg` `G`, wheel | Scroll (freezes all panes first; the wheel scrolls the pane under the pointer) |
 | `Space`, `F` | Freeze / follow the logs again |
 | `/` | Search terms, comma-separated; edit the list to remove one |

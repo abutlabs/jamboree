@@ -247,9 +247,9 @@ pub fn handle_key_event(
         // Zoom
         KeyCode::Enter | KeyCode::Char('z') => Action::ChangeView(ViewMode::Zoomed),
 
-        // Node visibility toggle
-        KeyCode::Char(c @ '0'..='9') => {
-            let idx = (c as usize) - ('0' as usize);
+        // Pane visibility toggle: 1 is the first pane
+        KeyCode::Char(c @ '1'..='9') => {
+            let idx = (c as usize) - ('1' as usize);
             if idx < nodes.len() {
                 app.hidden[idx] = !app.hidden[idx];
             }
