@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="256" height="256">
+  <style>.tile{fill:#111111}@media (prefers-color-scheme:dark){.tile{fill:#e8e8e8}}</style>
+  <rect class="tile" x="3" y="3" width="12" height="12" rx="2"/>
+  <rect class="tile" x="17" y="3" width="12" height="12" rx="2"/>
+  <rect class="tile" x="3" y="17" width="12" height="12" rx="2"/>
+  <rect x="19" y="19" width="12" height="12" rx="2" fill="#E6007A"/>
+</svg>
