@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo.svg" width="160" alt=""></p>
+
 # jamboree
 
 Terminal UI for watching the logs of several JAM nodes side by side. Built while
