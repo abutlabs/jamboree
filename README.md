@@ -95,8 +95,10 @@ jam-ui --logs logs/20260111_161505 --search "error,warning"
 - **`0-9`** - Toggle node visibility
 - **`Tab`** - Cycle focus between nodes
 - **`/`** - Search/highlight text in logs (comma-separated terms, max 6)
-- **`Space`** - Pause/unpause all nodes (enables scrolling)
-- **`X`** - Shutdown all nodes: TERM, then KILL after 3 s (auto-pauses, allows viewing logs)
+- **`Space`** - Freeze/unfreeze all panes (enables scrolling; the nodes keep running)
+- **`S`** - Stop/continue the focused node (SIGSTOP/SIGCONT to its process group). The
+  node stays connected but goes silent, then wakes up behind. Every log gets a marker line
+- **`X`** - Shutdown all nodes: TERM, then KILL after 3 s (auto-freezes, allows viewing logs)
 - **`Enter`** - Zoom into focused node
 - **`Esc`** - Return to grid view
 - **`Q`** - Quit (stops all nodes first)
@@ -110,7 +112,7 @@ jam-ui --logs logs/20260111_161505 --search "error,warning"
 - **`Esc`** - Return to grid view
 - **`Q`** - Quit
 
-**Scrolling (when paused or in log viewer mode):**
+**Scrolling (when frozen or in log viewer mode):**
 - Arrow keys / mouse wheel or Page Up/Down to scroll
 - Each node scrolls independently
 

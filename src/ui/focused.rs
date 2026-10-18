@@ -97,10 +97,11 @@ pub fn render(f: &mut Frame, node: &Node, app: &AppState) {
         .block(
             Block::default()
                 .title(format!(
-                    "{} {} (ZOOM){}",
+                    "{} {} (ZOOM){}{}",
                     node.label,
                     node.id,
-                    if paused { " [PAUSED]" } else { "" }
+                    if node.is_stopped() { " [STOPPED]" } else { "" },
+                    if paused { " [FROZEN]" } else { "" }
                 ))
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Green)),

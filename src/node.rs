@@ -5,7 +5,10 @@ use std::{
     io::{Read, Write},
     path::PathBuf,
     process,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -21,7 +24,11 @@ pub struct Node {
     paused_buffer: Arc<Mutex<String>>,
     current_size: Arc<Mutex<PtySize>>,
     pub paused: Arc<Mutex<bool>>,
-    child: Option<Mutex<Box<dyn Child + Send + Sync>>>,
+    /// Pid of the `sh -c` that runs the node; also its process group id
+    pid: Option<u32>,
+    log_path: Option<PathBuf>,
+    /// The node's process group is SIGSTOPped
+    stopped: AtomicBool,
 }
 
 impl Node {
@@ -45,7 +52,8 @@ impl Node {
             pixel_height: 0,
         }));
         let paused = Arc::new(Mutex::new(false));
-        let child = Some(Mutex::new(pair.slave.spawn_command(cmd)?));
+        let child = pair.slave.spawn_command(cmd)?;
+        let log_path = log_dir.join(format!("node_{}.log", id));
 
         let node = Node {
             id,
@@ -55,21 +63,23 @@ impl Node {
             paused_buffer,
             current_size,
             paused,
-            child,
+            pid: child.process_id(),
+            log_path: Some(log_path.clone()),
+            stopped: AtomicBool::new(false),
         };
 
         // Start the reader task
-        let log_path = log_dir.join(format!("node_{}.log", id));
         let log_file = OpenOptions::new()
             .create(true)
             .append(true)
             .open(log_path)?;
-        node.start_reader_task(log_file);
+        node.start_reader_task(log_file, child);
 
         Ok(node)
     }
 
-    fn start_reader_task(&self, mut log_file: File) {
+    /// Copies the node's output to its log and pane; reaps the shell once the output ends.
+    fn start_reader_task(&self, mut log_file: File, mut child: Box<dyn Child + Send + Sync>) {
         let id = self.id;
         let buffer = self.buffer.clone();
         let paused_buffer = self.paused_buffer.clone();
@@ -114,31 +124,50 @@ impl Node {
                 // Strip ANSI codes for both log file and UI (clean text in logs, no escape codes)
                 let clean_text = String::from_utf8_lossy(&strip(text.as_bytes())).replace('\r', "");
 
-                // Write clean text (no ANSI codes) to log file
-                let _ = log_file.write_all(clean_text.as_bytes());
-
-                // Append to UI buffer
-                let is_paused = *paused.lock().unwrap();
-
-                if is_paused {
-                    let mut pb = paused_buffer.lock().unwrap();
-                    pb.push_str(&clean_text);
-                } else {
-                    let mut b = buffer.lock().unwrap();
-                    b.push_str(&clean_text);
-
-                    // cap ONLY main buffer
-                    if b.len() > 100_000 {
-                        let drain = b.len() - 100_000;
-                        let safe_drain = (0..=drain)
-                            .rev()
-                            .find(|&i| b.is_char_boundary(i))
-                            .unwrap_or(0);
-                        b.drain(..safe_drain);
-                    }
-                }
+                append(
+                    &clean_text,
+                    Some(&mut log_file),
+                    &buffer,
+                    &paused_buffer,
+                    &paused,
+                );
             }
+            // Reap the shell, so a zombie does not count as alive in `signal("0")`
+            let _ = child.wait();
         });
+    }
+
+    /// Write a jam-ui marker line into this node's log and pane, e.g. when a fault starts.
+    pub fn mark(&self, text: &str) {
+        let line = format!(
+            "\n=== jam-ui {} {} ===\n",
+            chrono::Local::now().format("%H:%M:%S%.3f"),
+            text
+        );
+        let mut log_file = self
+            .log_path
+            .as_ref()
+            .and_then(|p| OpenOptions::new().append(true).open(p).ok());
+        append(
+            &line,
+            log_file.as_mut(),
+            &self.buffer,
+            &self.paused_buffer,
+            &self.paused,
+        );
+    }
+
+    pub fn is_stopped(&self) -> bool {
+        self.stopped.load(Ordering::Relaxed)
+    }
+
+    /// SIGSTOP the node, or SIGCONT it if it is stopped. Returns whether it is now stopped.
+    pub fn toggle_stopped(&self) -> bool {
+        let stop = !self.stopped.load(Ordering::Relaxed);
+        if self.signal(if stop { "STOP" } else { "CONT" }) {
+            self.stopped.store(stop, Ordering::Relaxed);
+        }
+        self.stopped.load(Ordering::Relaxed)
     }
 
     pub fn resize_pty_if_needed(&self, new_size: PtySize) {
@@ -171,7 +200,9 @@ impl Node {
             paused_buffer,
             current_size,
             paused,
-            child: None,
+            pid: None,
+            log_path: None,
+            stopped: AtomicBool::new(false),
         };
 
         // Load log file content
@@ -212,13 +243,7 @@ impl Node {
     /// so it reaches the client and not just the `sh -c` around it. The pty makes that shell
     /// a session leader, so its pid is the group id. Returns false if nothing was signalled.
     pub fn signal(&self, sig: &str) -> bool {
-        let Some(child) = &self.child else {
-            return false;
-        };
-        let mut child = child.lock().unwrap();
-        // Reap the shell if it exited, so a zombie does not count as alive
-        let _ = child.try_wait();
-        let Some(pid) = child.process_id() else {
+        let Some(pid) = self.pid else {
             return false;
         };
         #[cfg(unix)]
@@ -262,5 +287,36 @@ pub fn stop_all(nodes: &[Node], grace: Duration) {
     }
     for node in nodes {
         node.signal("KILL");
+    }
+}
+
+/// Append text to the log file and to the pane, or to the held-back buffer while frozen.
+fn append(
+    text: &str,
+    log_file: Option<&mut File>,
+    buffer: &Mutex<String>,
+    paused_buffer: &Mutex<String>,
+    paused: &Mutex<bool>,
+) {
+    if let Some(log_file) = log_file {
+        let _ = log_file.write_all(text.as_bytes());
+    }
+
+    if *paused.lock().unwrap() {
+        paused_buffer.lock().unwrap().push_str(text);
+        return;
+    }
+
+    let mut b = buffer.lock().unwrap();
+    b.push_str(text);
+
+    // cap ONLY main buffer
+    if b.len() > 100_000 {
+        let drain = b.len() - 100_000;
+        let safe_drain = (0..=drain)
+            .rev()
+            .find(|&i| b.is_char_boundary(i))
+            .unwrap_or(0);
+        b.drain(..safe_drain);
     }
 }
