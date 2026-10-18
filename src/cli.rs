@@ -1,4 +1,6 @@
+use crate::event::Fault;
 use clap::{ArgGroup, Parser};
+use std::time::Duration;
 
 #[derive(Parser, Debug)]
 #[command(name = "jam-ui", term_width = 80, arg_required_else_help = true)]
@@ -34,4 +36,10 @@ pub struct Cli {
     /// With --move-ports, node i listens on PORT+i instead of a free port
     #[arg(long, value_name = "PORT", requires = "move_ports")]
     pub listen_port: Option<u16>,
+
+    /// Fault to apply, as its key would: `[<time>] <action>`, time like 90s or 2m after the
+    /// start (default at the start). Actions: stop N, isolate N, split A/B (e.g.
+    /// 0,1,2/3,4,5), restart N, heal (continue, un-isolate and unsplit all). Repeatable
+    #[arg(long, value_name = "FAULT", value_parser = Fault::parse, conflicts_with = "log_folder")]
+    pub fault: Vec<(Duration, Fault)>,
 }

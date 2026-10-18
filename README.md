@@ -101,6 +101,17 @@ jam-ui --nodes 6 --cmd 'polkajam=polkajam --chain dev run --pvm-backend interpre
   --dev-validator {i} --listen-ip 127.0.0.2 --rpc-port $((19800+{i}))'
 ```
 
+### Scripted faults
+
+`--fault '[<time>] <action>'` applies a fault as its key would, at a time after the start (`90s`,
+`2m`; none means at the start), with the same markers. Actions: `stop N`, `isolate N`,
+`split A/B`, `restart N` and `heal` (continue, un-isolate and unsplit everything):
+
+```sh
+jam-ui --nodes 6 --cmd '…' --fault '60s split 0,1,2/3,4,5' --fault '120s heal' \
+  --fault '150s restart 2'
+```
+
 ### Docker
 
 Put `{container}` where `docker run` takes the container name; jam-ui fills in a name per node
