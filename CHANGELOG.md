@@ -7,6 +7,8 @@
 - Arrows and the mouse: `←` `→` (and `h` `l`) move focus, `↑` `↓` PgUp/PgDn Home/End scroll
   and freeze like the vi keys, click focuses, a second click or `z` zooms, the wheel scrolls
   the pane under the pointer, `F` follows again. Search terms are removed by editing `/`.
+- `--chaos SEED` adds a random, replayable fault schedule; every run with faults saves them
+  as `--fault` arguments in `faults.txt`.
 - `1`-`9` hide or show the 1st to 9th pane (was `0`-`9`).
 - `--help` shows examples, a key summary and grouped options; `--version` added.
 - Fix: a command starting with an environment variable such as `RUST_LOG=debug` is no longer

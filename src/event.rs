@@ -422,4 +422,85 @@ impl Fault {
     pub fn cuts(&self) -> bool {
         matches!(self, Fault::Isolate(_) | Fault::Split(_))
     }
+
+    /// A random schedule for n nodes from `seed`, all healed by `end`: every 20-60s one fault on
+    /// a random node or a random split, healed 20-60s later (a restart needs no heal)
+    pub fn chaos(seed: u64, n: usize, end: Duration) -> Vec<(Duration, Fault)> {
+        // splitmix64, so a seed gives the same schedule on every machine and version of Rust
+        let mut state = seed;
+        let mut next = |below: u64| {
+            state = state.wrapping_add(0x9e3779b97f4a7c15);
+            let mut z = state;
+            z = (z ^ (z >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94d049bb133111eb);
+            (z ^ (z >> 31)) % below
+        };
+        let mut faults = Vec::new();
+        let mut at = 0;
+        loop {
+            at += 20 + next(41);
+            let heal = at + 20 + next(41);
+            if heal > end.as_secs() {
+                return faults;
+            }
+            let i = next(n as u64) as usize;
+            let fault = match next(if n < 2 { 3 } else { 4 }) {
+                0 => Fault::Stop(i),
+                1 => Fault::Isolate(i),
+                2 => Fault::Restart(i),
+                _ => loop {
+                    let side: Vec<u64> = (0..n).map(|_| next(2)).collect();
+                    let [a, b]: [Vec<usize>; 2] =
+                        [0, 1].map(|s| (0..n).filter(|&j| side[j] == s).collect());
+                    if !a.is_empty() && !b.is_empty() {
+                        break Fault::Split(vec![a, b]);
+                    }
+                },
+            };
+            let healed = !matches!(fault, Fault::Restart(_));
+            faults.push((Duration::from_secs(at), fault));
+            if healed {
+                faults.push((Duration::from_secs(heal), Fault::Heal));
+            }
+            at = heal;
+        }
+    }
+}
+
+/// The fault as a --fault argument, e.g. `60s split 0,1,2/3,4,5`
+impl std::fmt::Display for Fault {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let list = |v: &Vec<usize>| v.iter().map(usize::to_string).collect::<Vec<_>>().join(",");
+        match self {
+            Fault::Stop(i) => write!(f, "stop {i}"),
+            Fault::Isolate(i) => write!(f, "isolate {i}"),
+            Fault::Restart(i) => write!(f, "restart {i}"),
+            Fault::Split(sides) => {
+                write!(f, "split {}", sides.iter().map(list).collect::<Vec<_>>().join("/"))
+            }
+            Fault::Heal => write!(f, "heal"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn chaos_is_replayable_and_valid() {
+        let end = Duration::from_secs(600);
+        let faults = Fault::chaos(7, 6, end);
+        assert!(faults.len() >= 10);
+        for (at, fault) in &faults {
+            fault.check(6).unwrap();
+            assert!(*at <= end);
+            let (again, parsed) = Fault::parse(&format!("{}s {fault}", at.as_secs())).unwrap();
+            assert_eq!((again, parsed.to_string()), (*at, fault.to_string()));
+        }
+        let text = |f: &[(Duration, Fault)]| format!("{f:?}");
+        assert_eq!(text(&faults), text(&Fault::chaos(7, 6, end)));
+        assert_ne!(text(&faults), text(&Fault::chaos(8, 6, end)));
+        assert!(Fault::chaos(7, 6, Duration::from_secs(30)).is_empty());
+    }
 }

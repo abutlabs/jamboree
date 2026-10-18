@@ -54,6 +54,12 @@ pub struct Cli {
     #[arg(help_heading = "Network", long, value_name = "FAULT", value_parser = Fault::parse, conflicts_with = "log_folder")]
     pub fault: Vec<(Duration, Fault)>,
 
+    /// Add a random fault schedule from SEED: a stop, isolate, split or restart every 20-60s,
+    /// healed 20-60s later. The same seed and node count give the same schedule; it is saved as
+    /// --fault arguments in the run's faults.txt. Without --headless it runs for an hour
+    #[arg(long, value_name = "SEED", help_heading = "Network", conflicts_with = "log_folder")]
+    pub chaos: Option<u64>,
+
     /// Run without the UI for DURATION (e.g. 5m), for CI and scripts; then stop the nodes, print
     /// a summary and exit 0, or 1 when --head finds them on different heads
     #[arg(help_heading = "Headless", long, value_name = "DURATION", value_parser = parse_duration, conflicts_with = "log_folder")]
