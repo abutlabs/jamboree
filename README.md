@@ -96,10 +96,10 @@ jam-ui --logs logs/20260111_161505 --search "error,warning"
 - **`Tab`** - Cycle focus between nodes
 - **`/`** - Search/highlight text in logs (comma-separated terms, max 6)
 - **`Space`** - Pause/unpause all nodes (enables scrolling)
-- **`X`** - Shutdown all nodes (auto-pauses, allows viewing logs)
+- **`X`** - Shutdown all nodes: TERM, then KILL after 3 s (auto-pauses, allows viewing logs)
 - **`Enter`** - Zoom into focused node
 - **`Esc`** - Return to grid view
-- **`Q`** - Quit
+- **`Q`** - Quit (stops all nodes first)
 
 ### Log Viewer Mode (Loading from Files)
 - **`0-9`** - Toggle node visibility

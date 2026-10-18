@@ -12,3 +12,5 @@
 - Output is saved to `logs/<timestamp>/node_<id>.log`; `--logs <dir>` replays any folder of
   `*.log` files, one pane per file.
 - Install with `cargo install --git https://github.com/jamixir/jam-ui`.
+- `x` and `q` stop each node's whole process group (TERM, then KILL after 3 s), so no
+  client outlives jam-ui.

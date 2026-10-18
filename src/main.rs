@@ -152,6 +152,7 @@ async fn run_app(cli: Cli, commands: Vec<(String, CommandBuilder)>) -> Result<()
                 Event::Key(k) => {
                     match handle_key_event(k.code, k.modifiers, &mut app, &mut focused, &nodes) {
                         Action::Quit => {
+                            node::stop_all(&nodes, Duration::from_secs(3));
                             // Cleanup and exit (process::exit terminates immediately, so guard won't drop)
                             let _ = disable_raw_mode();
                             let _ = execute!(stdout(), LeaveAlternateScreen, Show);
