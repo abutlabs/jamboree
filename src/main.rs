@@ -40,25 +40,45 @@ fn node_count(cmds: &[String], nodes: Option<usize>) -> Result<usize> {
     Ok(count)
 }
 
-/// One labelled `sh -c` command per node, with `{i}` replaced by the node index and `{port}` by
-/// the port it listens on, also in `$PORT` when the ports were moved
+/// The command template of node `id`
+fn node_template(cmds: &[String], id: usize) -> &str {
+    &cmds[if cmds.len() == 1 { 0 } else { id }]
+}
+
+/// Container name per node whose command uses `{container}`, unique to this run
+fn container_names(cmds: &[String], count: usize) -> Vec<Option<String>> {
+    (0..count)
+        .map(|id| {
+            node_template(cmds, id)
+                .contains("{container}")
+                .then(|| format!("jam-ui-{}-{id}", std::process::id()))
+        })
+        .collect()
+}
+
+/// One labelled `sh -c` command per node, with `{i}` replaced by the node index, `{port}` by
+/// the port it listens on (also in `$PORT` when the ports were moved) and `{container}` by its
+/// container name
 fn node_commands(
     cmds: &[String],
     ports: &[u16],
     moved: bool,
-) -> Result<Vec<(String, CommandBuilder)>> {
+    containers: &[Option<String>],
+) -> Result<Vec<(String, CommandBuilder, Option<String>)>> {
     let cwd = std::env::current_dir()?;
     (0..ports.len())
         .map(|id| {
-            let (label, cmd) = utils::split_label(&cmds[if cmds.len() == 1 { 0 } else { id }]);
-            let cmd = utils::node_command(cmd, id).replace("{port}", &ports[id].to_string());
+            let (label, cmd) = utils::split_label(node_template(cmds, id));
+            let cmd = utils::node_command(cmd, id)
+                .replace("{port}", &ports[id].to_string())
+                .replace("{container}", containers[id].as_deref().unwrap_or_default());
             let mut c = CommandBuilder::new("sh");
             c.args(["-c", &cmd]);
             if moved {
                 c.env("PORT", ports[id].to_string());
             }
             c.cwd(&cwd);
-            Ok((label.unwrap_or("Node").to_string(), c))
+            Ok((label.unwrap_or("Node").to_string(), c, containers[id].clone()))
         })
         .collect()
 }
@@ -88,8 +108,16 @@ async fn main() -> Result<()> {
             return Ok((Vec::new(), None));
         }
         let count = node_count(&cli.cmd, cli.nodes)?;
-        let net = Net::start(cli.genesis_port, count, cli.move_ports, cli.listen_port)?;
-        let commands = node_commands(&cli.cmd, net.listen_ports(), cli.move_ports)?;
+        let containers = container_names(&cli.cmd, count);
+        let net = Net::start(
+            cli.genesis_port,
+            count,
+            cli.move_ports,
+            cli.listen_port,
+            containers.clone(),
+        )?;
+        let ports = net.listen_ports();
+        let commands = node_commands(&cli.cmd, ports, cli.move_ports, &containers)?;
         Ok((commands, Some(net)))
     };
     let (commands, net) = match setup() {
@@ -109,7 +137,7 @@ async fn main() -> Result<()> {
 
 async fn run_app(
     cli: Cli,
-    commands: Vec<(String, CommandBuilder)>,
+    commands: Vec<(String, CommandBuilder, Option<String>)>,
     net: Option<Net>,
 ) -> Result<()> {
     enable_raw_mode()?;
@@ -159,7 +187,7 @@ async fn run_app(
         let nodes = commands
             .into_iter()
             .enumerate()
-            .map(|(id, (label, cmd))| Node::spawn(id, label, &log_dir, cmd))
+            .map(|(id, (label, cmd, container))| Node::spawn(id, label, &log_dir, cmd, container))
             .collect::<Result<Vec<Node>>>()?;
 
         let mut app = AppState::new(nodes.len(), cli.search);

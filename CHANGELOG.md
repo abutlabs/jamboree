@@ -21,3 +21,5 @@
   relays its traffic. `--move-ports` is the fallback for clients whose port cannot be shared.
 - `p` splits the network at the focused node and heals it; `r` restarts the focused node.
 - Each run saves its command line to `logs/<run>/cmd.txt`.
+- `{container}` in `--cmd` names a node's Docker container: `s` pauses it, restart and quit remove
+  it, and `i`/`p` find its traffic without root.

@@ -22,6 +22,8 @@ struct Shared {
     /// Port each node listens on: its genesis port, or its `$PORT` with --move-ports
     listen: Vec<u16>,
     moved: bool,
+    /// Docker container name of each node that runs in one (`{container}`)
+    containers: Vec<Option<String>>,
     /// Whether node j's relay is up
     relayed: Mutex<Vec<bool>>,
     /// Nodes cut off from all others
@@ -39,6 +41,7 @@ impl Net {
         n: usize,
         move_ports: bool,
         listen_base: Option<u16>,
+        containers: Vec<Option<String>>,
     ) -> Result<Self> {
         let listen = (0..n)
             .map(|i| match (move_ports, listen_base) {
@@ -51,6 +54,7 @@ impl Net {
             genesis_port,
             listen,
             moved: move_ports,
+            containers,
             relayed: Mutex::new(vec![false; n]),
             isolated: Mutex::new(vec![false; n]),
             split_at: Mutex::new(None),
@@ -113,9 +117,16 @@ impl Shared {
         } else {
             ("nodes", "do")
         };
+        // A port is shared only between sockets of one user, so a root container cannot share
+        let user = match self.containers.iter().any(Option::is_some) {
+            true => " (containers: run them with --user $(id -u):$(id -g))",
+            false => "",
+        };
         let why = match self.moved {
             true => format!("{verb} not listen on $PORT"),
-            false => format!("{verb} not share the genesis port; restart with --move-ports"),
+            false => {
+                format!("{verb} not share the genesis port{user}; or restart with --move-ports")
+            }
         };
         Err(format!(
             "cannot cut nodes off: {noun} {} {why}",
@@ -128,7 +139,7 @@ impl Shared {
         let until = Instant::now() + Duration::from_secs(120);
         while Instant::now() < until && self.relayed.lock().unwrap().contains(&false) {
             for j in 0..self.listen.len() {
-                if self.relayed.lock().unwrap()[j] || pids_on(self.listen[j]).is_empty() {
+                if self.relayed.lock().unwrap()[j] || !self.listening(j) {
                     continue;
                 }
                 let port = self.genesis_port + j as u16;
@@ -159,6 +170,16 @@ impl Shared {
         }
     }
 
+    /// Whether node j listens on its port. A container's root-owned socket is invisible to
+    /// `lsof`, so for one its cgroup is checked instead.
+    fn listening(&self, j: usize) -> bool {
+        let port = self.listen[j];
+        match self.containers[j] {
+            Some(_) => container_on(port).is_some(),
+            None => !pids_on(port).is_empty(),
+        }
+    }
+
     /// Whether traffic between the sender on local port `port` and node j is cut
     fn cut(&self, port: u16, j: usize) -> bool {
         let isolated = self.isolated.lock().unwrap().clone();
@@ -183,10 +204,17 @@ impl Shared {
                 return *node;
             }
         }
-        let pids = pids_on(port);
-        let node = (0..n).find(|&k| {
-            let listening = pids_on(self.listen[k]);
-            pids.iter().any(|p| listening.contains(p))
+        // A node sending from its own listen port; else match the port's container or process
+        let node = self.listen.iter().position(|&p| p == port).or_else(|| {
+            let container = container_on(port);
+            let pids = pids_on(port);
+            (0..n).find(|&k| match (&self.containers[k], &container) {
+                (Some(name), Some(id)) => container_id(name).is_some_and(|c| c.starts_with(id)),
+                _ => {
+                    let listening = pids_on(self.listen[k]);
+                    pids.iter().any(|p| listening.contains(p))
+                }
+            })
         });
         self.owners
             .lock()
@@ -263,4 +291,27 @@ fn pids_on(port: u16) -> Vec<String> {
         }
     }
     pids
+}
+
+/// Id (prefix) of the Docker container with a UDP socket on local port `port` (Linux: `ss`
+/// shows each socket's cgroup, `docker-<id>.scope`, without root)
+fn container_on(port: u16) -> Option<String> {
+    let out = Command::new("ss")
+        .args(["-uanH", "--cgroup", &format!("sport = :{port}")])
+        .output()
+        .ok()?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let id = text.split("docker-").nth(1)?.split(".scope").next()?;
+    Some(id.to_string())
+}
+
+/// Full id of the running container `name`
+fn container_id(name: &str) -> Option<String> {
+    let out = Command::new("docker")
+        .args(["inspect", "-f", "{{.Id}}", name])
+        .output()
+        .ok()?;
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
