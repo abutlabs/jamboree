@@ -29,12 +29,20 @@ pub struct Node {
     log_path: Option<PathBuf>,
     /// Command that starts the node, kept for restarts
     cmd: Option<CommandBuilder>,
+    /// Name of the node's Docker container, when its command uses `{container}`
+    container: Option<String>,
     /// The node's process group is SIGSTOPped
     stopped: AtomicBool,
 }
 
 impl Node {
-    pub fn spawn(id: usize, label: String, log_dir: &PathBuf, cmd: CommandBuilder) -> Result<Self> {
+    pub fn spawn(
+        id: usize,
+        label: String,
+        log_dir: &PathBuf,
+        cmd: CommandBuilder,
+        container: Option<String>,
+    ) -> Result<Self> {
         let mut node = Node {
             id,
             label,
@@ -51,6 +59,7 @@ impl Node {
             pid: None,
             log_path: Some(log_dir.join(format!("node_{}.log", id))),
             cmd: Some(cmd),
+            container,
             stopped: AtomicBool::new(false),
         };
         node.start()?;
@@ -165,13 +174,19 @@ impl Node {
         self.stopped.load(Ordering::Relaxed)
     }
 
-    /// SIGSTOP the node, or SIGCONT it if it is stopped. Returns whether it is now stopped.
-    pub fn toggle_stopped(&self) -> bool {
+    /// SIGSTOP the node, or SIGCONT it if it is stopped (`docker pause`/`unpause` for a
+    /// container, which SIGSTOP cannot reach). Returns whether it is now stopped, or None if
+    /// the node is not running.
+    pub fn toggle_stopped(&self) -> Option<bool> {
         let stop = !self.stopped.load(Ordering::Relaxed);
-        if self.signal(if stop { "STOP" } else { "CONT" }) {
+        let done = match &self.container {
+            Some(name) => docker(&[if stop { "pause" } else { "unpause" }, name]),
+            None => self.signal(if stop { "STOP" } else { "CONT" }),
+        };
+        done.then(|| {
             self.stopped.store(stop, Ordering::Relaxed);
-        }
-        self.stopped.load(Ordering::Relaxed)
+            stop
+        })
     }
 
     pub fn resize_pty_if_needed(&self, new_size: PtySize) {
@@ -207,6 +222,7 @@ impl Node {
             pid: None,
             log_path: None,
             cmd: None,
+            container: None,
             stopped: AtomicBool::new(false),
         };
 
@@ -281,9 +297,13 @@ impl Node {
     }
 }
 
-/// TERM every node, give them `grace` to exit, then KILL what is left.
+/// TERM every node, give them `grace` to exit, then KILL what is left. A container is
+/// unpaused first, and removed at the end: KILL stops only the `docker run` client.
 pub fn stop_all(nodes: &[Node], grace: Duration) {
     for node in nodes {
+        if let (Some(name), true) = (&node.container, node.is_stopped()) {
+            docker(&["unpause", name]);
+        }
         node.shutdown();
     }
     let deadline = Instant::now() + grace;
@@ -292,7 +312,20 @@ pub fn stop_all(nodes: &[Node], grace: Duration) {
     }
     for node in nodes {
         node.signal("KILL");
+        if let Some(name) = &node.container {
+            docker(&["rm", "-f", name]);
+        }
     }
+}
+
+/// Run `docker <args>`; returns whether it succeeded
+fn docker(args: &[&str]) -> bool {
+    process::Command::new("docker")
+        .args(args)
+        .stdout(process::Stdio::null())
+        .stderr(process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
 }
 
 /// Append text to the log file and to the pane, or to the held-back buffer while frozen.

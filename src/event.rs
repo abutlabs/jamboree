@@ -212,13 +212,14 @@ pub fn handle_key_event(
         // Stop/continue the focused node (SIGSTOP/SIGCONT), marked in every log
         KeyCode::Char('s') if !app.log_viewer_mode => {
             let node = &nodes[*focused];
-            let what = if node.toggle_stopped() {
-                "stopped"
-            } else {
-                "continued"
-            };
-            for n in nodes.iter() {
-                n.mark(&format!("{} {} {}", node.label, node.id, what));
+            match node.toggle_stopped() {
+                Some(stopped) => {
+                    let what = if stopped { "stopped" } else { "continued" };
+                    for n in nodes.iter() {
+                        n.mark(&format!("{} {} {}", node.label, node.id, what));
+                    }
+                }
+                None => node.mark("stop failed: the node is not running"),
             }
             Action::Continue
         }

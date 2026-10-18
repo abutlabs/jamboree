@@ -101,6 +101,22 @@ jam-ui --nodes 6 --cmd 'polkajam=polkajam --chain dev run --pvm-backend interpre
   --dev-validator {i} --listen-ip 127.0.0.2 --rpc-port $((19800+{i}))'
 ```
 
+### Docker
+
+Put `{container}` where `docker run` takes the container name; jam-ui fills in a name per node
+and run, and then pauses that container for `s` (`docker pause`; SIGSTOP cannot reach it) and
+removes it on restart and quit. Use host networking so nodes reach each other on loopback:
+
+```sh
+jam-ui --nodes 6 --cmd 'docker run --rm --init --network host --user $(id -u):$(id -g) \
+  --name {container} <image> <flags for node {i}>'
+```
+
+`--user` lets jam-ui share the genesis port for `i`/`p` (Linux shares a port only between
+sockets of one user); for an image that must run as root, use `--move-ports` and pass `$PORT`
+to the node instead. On Fedora and other SELinux systems, mount volumes with `:z`
+(`-v ./spec:/spec:z`). Docker faults need Linux.
+
 ### Search and log viewer
 
 ```bash
