@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.1
 
 - `Ctrl+G` with no search terms opens the search box, so typed terms no longer reach the node keys.
 - Config file `~/.config/jamboree/config.toml`; `--print-config` prints the defaults. First option:
