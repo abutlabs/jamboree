@@ -6,8 +6,8 @@
 
 For milestone M2, JAM client teams run testnets of many nodes, often from different clients.
 jamboree starts them all from one command, shows their live logs in one terminal grid and
-saves every log. It can also stop, isolate, split or restart nodes, which is where many of
-the hard bugs show up. Saved logs, from jamboree or anywhere else, open in the same grid.
+saves every log. It can also stop, isolate, split or restart nodes, and add delay, jitter or
+packet loss between them, which is where many of the hard bugs show up. Saved logs, from jamboree or anywhere else, open in the same grid.
 
 <img src="assets/demo.gif" alt="jamboree with four Jamixir nodes: each pane lists the blocks its node imported; splitting the network gives the two halves different heads, and healing it brings all four back to one head">
 
@@ -144,8 +144,23 @@ and unsplit everything). Times look like `90s` or `2m`; no time means at the sta
 `--fault` arguments in `faults.txt`, ready to replay or trim when a run finds a bug. Without
 `--headless` the schedule runs for an hour.
 
-For a slow or lossy network, `--delay 100ms --jitter 20ms --loss 1` holds back every packet
-between nodes by 80-120ms and drops 1% of them, in each direction, for the whole run.
+### Slow or lossy network
+
+`--delay`, `--jitter` and `--loss` act on every packet between nodes, in each direction, for
+the whole run:
+
+```sh
+jamboree --nodes 6 --cmd '...' --delay 100ms --jitter 20ms --loss 1
+```
+
+| Flag | Effect |
+| --- | --- |
+| `--delay 100ms` | Holds back each packet by 100ms |
+| `--jitter 20ms` | Varies that delay by up to 20ms either way (80-120ms), so packets can arrive out of order |
+| `--loss 1` | Drops 1% of the packets at random |
+
+They combine with the fault keys, `--fault` and `--chaos`, for example to test a split on a
+slow network.
 
 ## Run in CI
 
