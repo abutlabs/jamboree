@@ -13,8 +13,8 @@ Examples:
   jamboree --cmd '... --telemetry {telemetry}' --headless 3m --head jip3
   jamboree --logs logs/20261018_145800
 
-Keys: arrows or h/l focus, up/down scroll, Enter zoom, Space freeze, / search,
-s i p r stop/isolate/split/restart, ? all keys, q quit.
+Keys: arrows or h/l focus, up/down scroll a pane, End follow, Space freeze all, Enter zoom,
+/ search, Ctrl+G filter, c clear, s i p r stop/isolate/split/restart, ? all keys, q quit.
 Docs: https://github.com/jamixir/jamboree")]
 #[command(group(ArgGroup::new("source").required(true).args(["cmd", "log_folder", "print_config"])))]
 pub struct Cli {
@@ -83,7 +83,7 @@ pub struct Cli {
     pub chaos: Option<u64>,
 
     /// Run without the UI for DURATION (e.g. 5m), for CI and scripts; then stop the nodes, print
-    /// a summary and exit 0, or 1 when --head finds them on different heads
+    /// a summary and exit 0, or 1 when --head finds them on different heads (2: setup error)
     #[arg(help_heading = "Headless", long, value_name = "DURATION", value_parser = parse_duration, conflicts_with = "log_folder")]
     pub headless: Option<Duration>,
 

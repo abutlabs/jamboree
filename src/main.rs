@@ -146,19 +146,17 @@ async fn main() -> Result<()> {
         let net = Net::start(&cli, count, containers.clone())?;
         let ports = net.listen_ports();
         let commands = node_commands(&cmds, ports, &containers)?;
-        if cli.dry_run {
-            for (id, (label, c, ..)) in commands.iter().enumerate() {
-                println!("{label} {id}: {}", c.get_argv()[2].to_string_lossy());
-            }
-            process::exit(0);
-        }
         for (_, fault) in &cli.fault {
             fault.check(count).map_err(anyhow::Error::msg)?;
         }
         let mut faults = cli.fault.clone();
         if let Some(seed) = cli.chaos {
             let end = cli.headless.unwrap_or(Duration::from_secs(3600));
-            faults.extend(Fault::chaos(seed, count, end));
+            let chaos = Fault::chaos(seed, count, end);
+            if chaos.is_empty() {
+                eprintln!("warning: --chaos adds no faults to a run this short (each needs up to 2 minutes)");
+            }
+            faults.extend(chaos);
         }
         faults.sort_by_key(|(at, _)| *at);
         let labels: Vec<String> = commands.iter().map(|(label, ..)| label.clone()).collect();
@@ -166,11 +164,22 @@ async fn main() -> Result<()> {
             .map(|arg| Head::parse(arg, &labels))
             .collect::<Result<Vec<_>>>()?;
         for (label, _, _, telemetry) in &commands {
-            let head = Head::for_label(&heads, label).map(|h| h.regex.as_str());
-            anyhow::ensure!(
-                !matches!(head, Some(JIP3 | JIP3_FINAL)) || telemetry.is_some(),
-                "--head jip3 needs {{telemetry}} in the --cmd of the {label} nodes"
-            );
+            let head = match Head::for_label(&heads, label).map(|h| h.regex.as_str()) {
+                Some(JIP3) => "jip3",
+                Some(JIP3_FINAL) => "jip3-final",
+                _ => continue,
+            };
+            let cmd = match label.as_str() {
+                "Node" => "--cmd".to_string(),
+                label => format!("--cmd of the {label} nodes"),
+            };
+            anyhow::ensure!(telemetry.is_some(), "--head {head} needs {{telemetry}} in the {cmd}");
+        }
+        if cli.dry_run {
+            for (id, (label, c, ..)) in commands.iter().enumerate() {
+                println!("{label} {id}: {}", c.get_argv()[2].to_string_lossy());
+            }
+            process::exit(0);
         }
         Ok((commands, Some(net), faults, heads))
     };
@@ -178,7 +187,7 @@ async fn main() -> Result<()> {
         Ok(setup) => setup,
         Err(e) => {
             eprintln!("Error: {:#}", e);
-            std::process::exit(1);
+            std::process::exit(2);
         }
     };
 
@@ -188,13 +197,13 @@ async fn main() -> Result<()> {
             Ok(code) => process::exit(code),
             Err(e) => {
                 eprintln!("Error: {:#}", e);
-                process::exit(1);
+                process::exit(2);
             }
         }
     }
     if let Err(e) = run_app(cli, commands, net, faults).await {
-        eprintln!("Error: {}", e);
-        std::process::exit(1);
+        eprintln!("Error: {:#}", e);
+        std::process::exit(2);
     }
     Ok(())
 }
@@ -421,7 +430,8 @@ async fn run_app(
         let mut nodes = Vec::new();
 
         // One pane per *.log file, up to --nodes
-        let files = utils::find_log_files(&log_dir)?;
+        let files = utils::find_log_files(&log_dir)
+            .map_err(|e| anyhow::anyhow!("can't read {log_folder}: {e}"))?;
         for (id, log_path) in files.iter().take(cli.nodes.unwrap_or(usize::MAX)).enumerate() {
             nodes.push(Node::from_log_file(id, log_path)?);
         }
@@ -459,7 +469,7 @@ async fn run_app(
             }
             // Render help overlay on top if active
             if app.show_help {
-                help::render(f, app.esc_clears_search);
+                help::render(f, app.esc_clears_search, &app.help_scroll);
             }
         })?;
 

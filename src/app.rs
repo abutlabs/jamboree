@@ -1,6 +1,6 @@
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::layout::Rect;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::time::Instant;
 use std::collections::HashMap;
 
@@ -18,6 +18,7 @@ pub struct AppState {
     pub grep_mode: bool, // true to filter lines (grep), false to only highlight
     pub esc_clears_search: bool, // config: Esc turns the filter off and clears the search first
     pub show_help: bool, // true to display help overlay
+    pub help_scroll: Cell<u16>, // first help line shown, on a terminal too short for all of it
     pub last_key: Option<char>, // Track last key for vi commands like 'gg'
     /// Where each pane was drawn, by node index, for the mouse
     pub panes: RefCell<Vec<(usize, Rect)>>,
@@ -109,6 +110,7 @@ impl AppState {
             grep_mode: false,
             esc_clears_search: false,
             show_help: false,
+            help_scroll: Cell::new(0),
             last_key: None,
             panes: RefCell::new(Vec::new()),
             last_click: None,
@@ -130,6 +132,7 @@ impl AppState {
             grep_mode: false,
             esc_clears_search: false,
             show_help: false,
+            help_scroll: Cell::new(0),
             last_key: None,
             panes: RefCell::new(Vec::new()),
             last_click: None,
@@ -141,7 +144,8 @@ impl AppState {
         match key {
             // Ctrl+W drops the last term, Ctrl+U the whole line
             KeyCode::Char('w') if ctrl => {
-                let keep = self.search_input.rfind(',').unwrap_or(0);
+                let input = self.search_input.trim_end().trim_end_matches(',');
+                let keep = input.rfind(',').unwrap_or(0);
                 self.search_input.truncate(keep);
             }
             KeyCode::Char('u') if ctrl => self.search_input.clear(),
@@ -162,22 +166,18 @@ impl AppState {
             }
             _ => {}
         }
+        // The filter needs terms: leaving the box with none turns it off
+        if !self.search_mode && self.highlight.is_none() {
+            self.grep_mode = false;
+        }
     }
 
     pub fn toggle_pause(&mut self, nodes: &[Node]) {
         self.paused = !self.paused;
-        if self.paused {
-            // entering pause
-            for n in nodes {
-                *n.paused.lock().unwrap() = true;
-            }
-        } else {
-            // leaving pause
-            for n in nodes {
-                *n.paused.lock().unwrap() = false;
-                n.flush_paused_buffer();
-            }
-
+        for n in nodes {
+            n.set_frozen(self.paused);
+        }
+        if !self.paused {
             // reset frozen scroll
             for s in self.frozen_scroll.borrow_mut().iter_mut() {
                 *s = 0;
@@ -191,30 +191,27 @@ impl AppState {
         scroll[idx] = next as u16;
     }
 
-    /// Shutdown all nodes and auto-trigger pause
-    pub fn shutdown_all_nodes(&mut self, nodes: &[Node]) {
-        crate::node::stop_all(nodes, std::time::Duration::from_secs(3));
-
-        // Auto-trigger pause if not already paused
-        if !self.paused {
-            self.toggle_pause(nodes);
-        }
-    }
-
-    /// Toggle grep mode (filter lines vs highlight only)
     /// Drop the search terms and show all lines again
     pub fn clear_search(&mut self) {
         self.highlight = None;
-        self.grep_mode = false;
+        self.search_input.clear();
+        if self.grep_mode {
+            self.toggle_grep_mode();
+        }
     }
 
+    /// Filter on or off; a scrolled pane goes to the end, as its line numbers change
     pub fn toggle_grep_mode(&mut self) {
         self.grep_mode = !self.grep_mode;
+        for s in self.frozen_scroll.borrow_mut().iter_mut() {
+            *s = 10000; // clamped by the renderer
+        }
     }
 
     /// Toggle help overlay
     pub fn toggle_help(&mut self) {
         self.show_help = !self.show_help;
+        self.help_scroll.set(0);
     }
 
     /// Scroll to the beginning of the file (vi 'gg')

@@ -56,14 +56,15 @@ Every run is saved to `logs/<timestamp>/node_<i>.log`, with the command line in 
 
 ## Follow an event across nodes
 
-- `Space` freezes all panes at once (the nodes keep running), so you can scroll each one.
+- Scrolling a pane (arrows, wheel) freezes only that pane; `End` follows its logs again. `Space`
+  freezes all panes at once, to compare them at one moment. The nodes keep running either way.
 - `/` searches: it highlights up to 6 comma-separated terms in every pane, each in its own
   colour. Paste a block hash to follow it through the network. `n`/`N` jump between matches.
   In the search box, `Ctrl+W` drops the last term and `Ctrl+U` all of them.
 - `Ctrl+G` filters: each pane shows only the lines that match (it asks for terms if there
   are none). `Ctrl+G` again shows all lines.
 - `c` clears the search and the filter.
-- `Enter` zooms into the focused pane, `Esc` goes back, `1`-`6` hide or show the 1st to 6th pane.
+- `Enter` zooms into the focused pane, `Esc` goes back, `1`-`6` hide or show node 0 to 5.
 - `--search 'error,warning'` sets the terms at start, also with `--logs`.
 
 ## Read saved logs
@@ -88,8 +89,10 @@ listens there, and writes these events in the node's pane and log:
 | Best block changed | `[jip3] best block <slot> <hash>` |
 | Finalized block changed | `[jip3] finalized <slot> <hash>` |
 | Sync status changed | `[jip3] in sync: yes` or `no` |
-| Authoring, block verification or block execution failed | `[jip3] block verification failed: <reason>` |
-| Peer misbehaved | `[jip3] peer misbehaved: <first 4 bytes of its peer ID>: <reason>` |
+| Authoring failed | `[jip3] authoring failed: <reason>` |
+| Block verification failed | `[jip3] block verification failed: <reason>` |
+| Block execution failed | `[jip3] block execution failed: <reason>` |
+| Peer misbehaved | `[jip3] peer misbehaved: 0x<first 4 bytes of its peer ID>: <reason>` |
 
 These lines look the same for every client, so one search follows a hash or a failure across
 a mixed network. They also give the head check in [Run in CI](#run-in-ci) its input:
@@ -134,7 +137,8 @@ and unsplit everything). Times look like `90s` or `2m`; no time means at the sta
 
 `--chaos SEED` adds a random schedule: every 20-60s a stop, isolate, split or restart, healed
 20-60s later. The same seed and node count give the same schedule, and each run saves it as
-`--fault` arguments in `faults.txt`, ready to replay or trim when a run finds a bug.
+`--fault` arguments in `faults.txt`, ready to replay or trim when a run finds a bug. Without
+`--headless` the schedule runs for an hour.
 
 For a slow or lossy network, `--delay 100ms --jitter 20ms --loss 1` holds back every packet
 between nodes by 80-120ms and drops 1% of them, in each direction, for the whole run.
@@ -142,7 +146,8 @@ between nodes by 80-120ms and drops 1% of them, in each direction, for the whole
 ## Run in CI
 
 `--headless DURATION` runs the same network without the UI, then stops the nodes. With
-`--head`, it checks that every node ended on the same head and exits 1 if not. That puts a
+`--head`, it checks that every node ended on the same head and exits 1 if not (2 for a setup
+error, such as a bad `--fault`). That puts a
 whole network run into a team's test cycle: a script or CI job can replay a fixed `--fault`
 scenario, or run `--chaos SEED` with a new seed each night, and fail when the nodes disagree:
 
@@ -263,17 +268,18 @@ jamboree --nodes 6 --move-ports --listen-port 41000 \
 | Key | Action |
 | --- | --- |
 | `←` `→`, `h` `l`, `Tab`, click | Focus previous / next node |
-| `Enter`, `z`, click the focused pane / `Esc` | Zoom in / back to grid |
-| `1`-`6` | Hide or show the 1st to 6th pane |
-| `↑` `↓`, `j` `k`, PgUp/PgDn, Home/End, `Ctrl+D/U/F/B`, `gg` `G`, wheel | Scroll (freezes all panes first; the wheel scrolls the pane under the pointer) |
-| `Space`, `F` | Freeze / follow the logs again |
+| `Enter`, `z`, double-click / `Esc` | Zoom in / back to grid |
+| `1`-`6` | Hide or show node 0 to 5 |
+| `↑` `↓`, `j` `k`, PgUp/PgDn, Home, `Ctrl+D/U/F/B`, `gg`, wheel | Scroll (freezes that pane; the wheel scrolls the pane under the pointer) |
+| `End`, `G`, `F` | Follow the pane's logs again |
+| `Space` | Freeze / follow all panes |
 | `/` | Search: highlight terms, comma-separated; in the box `Ctrl+W` drops the last term, `Ctrl+U` all |
 | `n` / `N` | Next / previous match |
 | `Ctrl+G` | Filter: only matching lines / show all again |
 | `c` | Clear the search and the filter |
 | `s` `i` `p` `r` | Stop, isolate, split, restart |
-| `x` | Shut down all nodes (TERM, then KILL after 3 s) |
-| `?` | Help |
+| `x` | Shut down all nodes (TERM, then KILL after 3 s); their logs stay |
+| `?` | Help (`↑` `↓` scroll it on a short terminal) |
 | `q` | Quit (stops all nodes first) |
 
 The mouse is on, so to select text hold Shift while dragging.

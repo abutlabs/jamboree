@@ -34,19 +34,20 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState, net
         .constraints(constraints)
         .split(f.size());
 
-    if visible.is_empty() {
-        f.render_widget(
-            Paragraph::new("No nodes visible").block(Block::default().borders(Borders::ALL)),
-            layout[1],
-        );
-        return;
-    }
-
     // ---- MENU BAR ----
     let menu_text = menus::grid_menu(app, has_tags);
 
     let menu = Paragraph::new(menu_text).style(Style::default().bg(Color::Blue).fg(Color::White));
     f.render_widget(menu, layout[0]);
+
+    if visible.is_empty() {
+        f.render_widget(
+            Paragraph::new("No nodes visible: 1-6 show them again")
+                .block(Block::default().borders(Borders::ALL)),
+            layout[layout.len() - 1],
+        );
+        return;
+    }
 
     // ---- TAGS ----
     if has_tags {
@@ -106,7 +107,7 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState, net
             let line_count = text.lines().count();
             let max_scroll = line_count.saturating_sub(visible_lines).min(10_000) as u16;
 
-            let scroll_y = if app.paused || app.log_viewer_mode {
+            let scroll_y = if node.is_frozen() || app.log_viewer_mode {
                 // Clamp stored scroll to actual max and update stored value
                 let stored = app.frozen_scroll.borrow()[node_idx];
                 let clamped = stored.min(max_scroll);
@@ -126,10 +127,11 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState, net
             let widget = Paragraph::new(content).scroll((scroll_y, 0)).block(
                 Block::default()
                     .title(format!(
-                        "{} {}{}",
+                        "{} {}{}{}",
                         node.label,
                         node_idx,
-                        fault_tags(net, node)
+                        fault_tags(net, node),
+                        frozen_tag(app, node)
                     ))
                     .borders(Borders::ALL)
                     .border_style(if focused == node_idx {
@@ -141,6 +143,14 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState, net
 
             f.render_widget(widget, area);
         }
+    }
+}
+
+/// A pane frozen by scrolling it, while the others follow (Space freezing all shows in the menu)
+pub fn frozen_tag(app: &AppState, node: &Node) -> &'static str {
+    match node.is_frozen() && !app.paused && !app.log_viewer_mode {
+        true => " [FROZEN: End follows]",
+        false => "",
     }
 }
 
