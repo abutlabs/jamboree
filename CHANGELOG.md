@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0
 
 - The help fits short terminals: no banner, two columns when one is too tall, and it scrolls
   only when neither fits. Shift+drag text selection is listed under NODES.
