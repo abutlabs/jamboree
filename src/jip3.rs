@@ -1,11 +1,16 @@
 //! JIP-3 telemetry: the messages a node sends to `--telemetry HOST:PORT`, read into pane lines
 //! (https://github.com/polkadot-fellows/JIPs/blob/main/JIP-3.md)
-use std::{io::Read, net::TcpListener};
+use std::{
+    io::Read,
+    net::TcpListener,
+    sync::atomic::{AtomicBool, Ordering},
+};
 
 /// Accept the node's connections on `listener`, one at a time (a restarted node connects
-/// again), and pass the line of each event `line` knows to `on_line`
-pub fn serve(listener: TcpListener, mut on_line: impl FnMut(&str)) {
+/// again), set `connected`, and pass the line of each event `line` knows to `on_line`
+pub fn serve(listener: TcpListener, connected: &AtomicBool, mut on_line: impl FnMut(&str)) {
     for mut stream in listener.incoming().flatten() {
+        connected.store(true, Ordering::Relaxed);
         // The first message is the node information
         let messages = std::iter::from_fn(|| read_message(&mut stream)).skip(1);
         for text in messages.filter_map(|m| line(&m)) {

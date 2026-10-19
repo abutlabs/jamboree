@@ -145,38 +145,40 @@ impl Node {
 
     /// Write the node's JIP-3 telemetry events to its log and pane, as `jip3::serve` reads them
     fn listen_telemetry(&self, listener: TcpListener) {
-        let buffer = self.buffer.clone();
-        let paused_buffer = self.paused_buffer.clone();
-        let paused = self.paused.clone();
-        let log_path = self.log_path.clone();
+        let connected = Arc::new(AtomicBool::new(false));
+        let address = listener.local_addr().map(|a| a.to_string()).unwrap_or_default();
+        // A node that never connects most likely did not get the address, e.g. a misspelt flag
+        let (waiting, mut warn) = (connected.clone(), self.writer());
         thread::spawn(move || {
-            let mut log_file =
-                (log_path.as_ref()).and_then(|p| OpenOptions::new().append(true).open(p).ok());
-            jip3::serve(listener, |line| {
-                append(line, log_file.as_mut(), &buffer, &paused_buffer, &paused)
-            });
+            thread::sleep(TELEMETRY_WAIT);
+            if !waiting.load(Ordering::Relaxed) {
+                let wait = TELEMETRY_WAIT.as_secs();
+                warn(&marker(&format!(
+                    "no JIP-3 telemetry on {address} after {wait}s: check the client's telemetry flag"
+                )));
+            }
         });
+        let mut write = self.writer();
+        thread::spawn(move || jip3::serve(listener, &connected, |line| write(line)));
+    }
+
+    /// Appends text to this node's pane and log, from any thread
+    fn writer(&self) -> impl FnMut(&str) + Send + 'static {
+        let (buffer, paused_buffer, paused) =
+            (self.buffer.clone(), self.paused_buffer.clone(), self.paused.clone());
+        let mut log_file =
+            (self.log_path.as_ref()).and_then(|p| OpenOptions::new().append(true).open(p).ok());
+        move |text| append(text, log_file.as_mut(), &buffer, &paused_buffer, &paused)
     }
 
     /// Write a jamboree marker line into this node's log and pane, e.g. when a fault starts.
     pub fn mark(&self, text: &str) {
-        let time = chrono::Local::now().format("%H:%M:%S%.3f");
-        self.note(&format!("\n=== jamboree {time} {text} ===\n"));
+        self.note(&marker(text));
     }
 
     /// Append a jamboree line to this node's log and pane
     fn note(&self, line: &str) {
-        let mut log_file = self
-            .log_path
-            .as_ref()
-            .and_then(|p| OpenOptions::new().append(true).open(p).ok());
-        append(
-            line,
-            log_file.as_mut(),
-            &self.buffer,
-            &self.paused_buffer,
-            &self.paused,
-        );
+        self.writer()(line);
     }
 
     pub fn is_stopped(&self) -> bool {
@@ -308,6 +310,15 @@ impl Node {
 }
 
 /// Write a jamboree marker line into every node's log and pane
+/// How long a node with {telemetry} gets to connect before its pane says it did not
+const TELEMETRY_WAIT: Duration = Duration::from_secs(60);
+
+/// A jamboree marker line, e.g. for a fault
+fn marker(text: &str) -> String {
+    let time = chrono::Local::now().format("%H:%M:%S%.3f");
+    format!("\n=== jamboree {time} {text} ===\n")
+}
+
 pub fn mark_all(nodes: &[Node], text: &str) {
     nodes.iter().for_each(|n| n.mark(text));
 }

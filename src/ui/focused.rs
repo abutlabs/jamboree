@@ -90,7 +90,7 @@ pub fn render(f: &mut Frame, node: &Node, app: &AppState, net: Option<&Net>) {
         app.frozen_scroll.borrow_mut()[node.id] = max_scroll;
         max_scroll
     };
-    let highlighted_text = highlight_text(&text, app.highlight.as_ref().map(|v| v.as_slice()));
+    let highlighted_text = highlight_text(&text, app.highlight.as_ref().map(|v| v.as_slice()), app.client_colors);
     let widget = Paragraph::new(highlighted_text)
         .scroll((scroll_y, 0))
         .block(

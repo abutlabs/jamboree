@@ -95,6 +95,9 @@ listens there, and writes these events in the node's pane and log:
 | Block execution failed | `[jip3] block execution failed: <reason>` |
 | Peer misbehaved | `[jip3] peer misbehaved: 0x<first 4 bytes of its peer ID>: <reason>` |
 
+A node that has not connected after 60 seconds gets a `no JIP-3 telemetry` line in its pane:
+usually the client's telemetry flag is misspelt or missing.
+
 These lines look the same for every client, so one search follows a hash or a failure across
 a mixed network. They also give the head check in [Run in CI](#run-in-ci) its input:
 `--head jip3` compares the nodes' last best block and `--head jip3-final` their last finalized
@@ -295,7 +298,9 @@ mkdir -p ~/.config/jamboree && jamboree --print-config > ~/.config/jamboree/conf
 ```
 
 `esc_clears_search = true` makes `Esc` turn the filter off, then clear the search, then leave
-zoom. An unknown option is an error at start.
+zoom. `client_colors = false` shows plain text instead of the colours the client prints (some
+colour whole lines by log level); search terms stay highlighted. An unknown option is an error
+at start.
 
 ## Licence
 

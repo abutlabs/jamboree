@@ -103,11 +103,19 @@ pub struct Cli {
 pub const DEFAULT_CONFIG: &str = include_str!("../config.toml");
 
 /// Options from config.toml; what the file leaves out keeps its default
-#[derive(Deserialize, Default, Debug, PartialEq)]
+#[derive(Deserialize, Debug, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     /// Esc also turns the filter off and clears the search before it leaves zoom
     pub esc_clears_search: bool,
+    /// Show each line in the colours the client printed it in
+    pub client_colors: bool,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config { esc_clears_search: false, client_colors: true }
+    }
 }
 
 impl Config {
@@ -135,6 +143,8 @@ mod tests {
         assert_eq!(toml::from_str::<Config>(DEFAULT_CONFIG).unwrap(), Config::default());
         assert!(toml::from_str::<Config>("esc_clears_serch = true").is_err());
         let set: Config = toml::from_str("esc_clears_search = true").unwrap();
-        assert!(set.esc_clears_search);
+        assert!(set.esc_clears_search && set.client_colors);
+        let plain: Config = toml::from_str("client_colors = false").unwrap();
+        assert!(!plain.client_colors);
     }
 }

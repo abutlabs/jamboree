@@ -379,10 +379,10 @@ async fn run_headless(
             0
         }
         (false, true) => {
-            println!(
-                "nodes on different heads {}s after the run:",
-                timeout.as_secs()
-            );
+            match found.iter().all(|(_, head)| head.is_none()) {
+                true => println!("no node logged a line matching --head (no JIP-3 telemetry?):"),
+                false => println!("nodes on different heads {}s after the run:", timeout.as_secs()),
+            }
             let mut groups: BTreeMap<Option<String>, Vec<String>> = BTreeMap::new();
             for (id, head) in found.clone() {
                 groups.entry(head).or_default().push(name(id));
@@ -450,6 +450,7 @@ async fn run_app(
     };
 
     app.esc_clears_search = config.esc_clears_search;
+    app.client_colors = config.client_colors;
     let mut focused = 0usize;
     let started = Instant::now();
 
