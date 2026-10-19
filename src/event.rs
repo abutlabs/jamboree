@@ -550,4 +550,159 @@ mod tests {
         assert_ne!(text(&faults), text(&Fault::chaos(8, 6, end)));
         assert!(Fault::chaos(7, 6, Duration::from_secs(30)).is_empty());
     }
+
+    /// n empty panes in a live app (not the log viewer), focus on node 0
+    fn panes(n: usize) -> (AppState, Vec<Node>, usize) {
+        let empty = std::path::PathBuf::from("no-such-log");
+        let nodes = (0..n).map(|i| Node::from_log_file(i, &empty).unwrap()).collect();
+        (AppState::new(n, None), nodes, 0)
+    }
+
+    /// Press the keys in order (a char is a plain key, `^c` is Ctrl+c); the last key's action
+    fn press(ui: &mut (AppState, Vec<Node>, usize), keys: &[&str]) -> Action {
+        let (app, nodes, focused) = ui;
+        let mut action = Action::Continue;
+        for key in keys {
+            let (code, mods) = match *key {
+                "Up" => (KeyCode::Up, KeyModifiers::NONE),
+                "Down" => (KeyCode::Down, KeyModifiers::NONE),
+                "End" => (KeyCode::End, KeyModifiers::NONE),
+                "Tab" => (KeyCode::Tab, KeyModifiers::NONE),
+                "BackTab" => (KeyCode::BackTab, KeyModifiers::SHIFT),
+                "Enter" => (KeyCode::Enter, KeyModifiers::NONE),
+                "Esc" => (KeyCode::Esc, KeyModifiers::NONE),
+                "Space" => (KeyCode::Char(' '), KeyModifiers::NONE),
+                k if k.starts_with('^') => (KeyCode::Char(k.chars().nth(1).unwrap()), KeyModifiers::CONTROL),
+                k => (KeyCode::Char(k.chars().next().unwrap()), KeyModifiers::NONE),
+            };
+            action = handle_key_event(code, mods, app, focused, nodes, None);
+        }
+        action
+    }
+
+    fn typed(text: &str) -> Vec<String> {
+        text.chars().map(String::from).collect()
+    }
+
+    fn frozen(nodes: &[Node]) -> Vec<bool> {
+        nodes.iter().map(|n| n.is_frozen()).collect()
+    }
+
+    fn terms(app: &AppState) -> Vec<&str> {
+        (app.highlight.iter().flatten()).map(|(t, _)| t.as_str()).collect()
+    }
+
+    #[test]
+    fn scrolling_freezes_only_the_focused_pane_and_space_resumes_it() {
+        let mut ui = panes(3);
+        press(&mut ui, &["Up"]);
+        assert_eq!(frozen(&ui.1), [true, false, false]);
+        press(&mut ui, &["Tab", "Down"]);
+        assert_eq!(frozen(&ui.1), [true, true, false]);
+        press(&mut ui, &["Space"]);
+        assert_eq!((frozen(&ui.1), ui.0.paused), (vec![false; 3], false));
+        // with nothing frozen, Space freezes all, and again resumes all
+        press(&mut ui, &["Space"]);
+        assert_eq!((frozen(&ui.1), ui.0.paused), (vec![true; 3], true));
+        press(&mut ui, &["Space"]);
+        assert_eq!((frozen(&ui.1), ui.0.paused), (vec![false; 3], false));
+    }
+
+    #[test]
+    fn end_g_and_f_follow_the_focused_pane_but_not_under_space() {
+        let mut ui = panes(2);
+        for follow in ["End", "G", "F"] {
+            press(&mut ui, &["k", follow]);
+            assert_eq!(frozen(&ui.1), [false, false], "{follow}");
+        }
+        press(&mut ui, &["Space", "End"]);
+        assert_eq!(frozen(&ui.1), [true, true]);
+    }
+
+    #[test]
+    fn keys_typed_in_the_search_box_do_not_reach_the_nodes() {
+        let mut ui = panes(2);
+        let mut keys = vec!["/".to_string()];
+        keys.extend(typed("s,q x"));
+        keys.push("Enter".to_string());
+        let keys: Vec<&str> = keys.iter().map(String::as_str).collect();
+        assert!(matches!(press(&mut ui, &keys), Action::Continue));
+        assert_eq!(terms(&ui.0), ["s", "q x"]);
+        assert!(!ui.1[0].get_text_tail(1000).contains("stop"));
+    }
+
+    #[test]
+    fn c_clears_the_terms_the_box_and_the_filter() {
+        let mut ui = panes(1);
+        press(&mut ui, &["/", "a", "Enter", "^g"]);
+        assert!(ui.0.grep_mode && terms(&ui.0) == ["a"]);
+        press(&mut ui, &["c", "/"]);
+        assert!(!ui.0.grep_mode && ui.0.highlight.is_none());
+        assert_eq!(ui.0.search_input, "");
+    }
+
+    #[test]
+    fn filter_without_terms_asks_for_them_and_is_off_when_none_are_given() {
+        let mut ui = panes(1);
+        press(&mut ui, &["^g"]);
+        assert!(ui.0.search_mode && ui.0.grep_mode);
+        press(&mut ui, &["Esc"]);
+        assert!(!ui.0.search_mode && !ui.0.grep_mode);
+        press(&mut ui, &["^g", "Enter"]);
+        assert!(!ui.0.grep_mode);
+    }
+
+    #[test]
+    fn ctrl_w_drops_the_last_term_even_after_a_trailing_comma() {
+        let mut ui = panes(1);
+        let mut keys = vec!["/".to_string()];
+        keys.extend(typed("a, b, "));
+        keys.push("^w".to_string());
+        let keys: Vec<&str> = keys.iter().map(String::as_str).collect();
+        press(&mut ui, &keys);
+        assert_eq!(ui.0.search_input, "a");
+        press(&mut ui, &["^w"]);
+        assert_eq!(ui.0.search_input, "");
+        press(&mut ui, &["x", "^u"]);
+        assert_eq!(ui.0.search_input, "");
+    }
+
+    #[test]
+    fn focus_skips_hidden_panes_and_leaves_a_pane_being_hidden() {
+        let mut ui = panes(4);
+        press(&mut ui, &["2", "Tab"]);
+        assert_eq!(ui.2, 2);
+        press(&mut ui, &["BackTab"]);
+        assert_eq!(ui.2, 0);
+        press(&mut ui, &["1"]);
+        assert_eq!(ui.2, 2);
+        // every pane hidden: focus stays
+        press(&mut ui, &["3", "4", "Tab"]);
+        assert_eq!(ui.2, 3);
+    }
+
+    #[test]
+    fn esc_leaves_zoom_unless_configured_to_undo_the_filter_and_search_first() {
+        let mut ui = panes(1);
+        press(&mut ui, &["/", "a", "Enter", "^g"]);
+        assert!(matches!(press(&mut ui, &["Esc"]), Action::ChangeView(ViewMode::Grid)));
+        assert!(ui.0.grep_mode && ui.0.highlight.is_some());
+
+        ui.0.esc_clears_search = true;
+        assert!(matches!(press(&mut ui, &["Esc"]), Action::Continue));
+        assert!(!ui.0.grep_mode && ui.0.highlight.is_some());
+        press(&mut ui, &["Esc"]);
+        assert!(ui.0.highlight.is_none());
+        assert!(matches!(press(&mut ui, &["Esc"]), Action::ChangeView(ViewMode::Grid)));
+    }
+
+    #[test]
+    fn help_scrolls_with_the_arrows_and_any_other_key_only_closes_it() {
+        let mut ui = panes(1);
+        press(&mut ui, &["?", "Down", "Down"]);
+        assert!(ui.0.show_help && ui.0.help_scroll.get() == 2);
+        assert!(matches!(press(&mut ui, &["q"]), Action::Continue));
+        assert!(!ui.0.show_help);
+        assert!(matches!(press(&mut ui, &["q"]), Action::Quit));
+    }
 }

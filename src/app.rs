@@ -17,6 +17,7 @@ pub struct AppState {
     pub highlight: Option<Vec<(String, usize)>>, // Multiple search terms with color index (max 6)
     pub grep_mode: bool, // true to filter lines (grep), false to only highlight
     pub esc_clears_search: bool, // config: Esc turns the filter off and clears the search first
+    pub client_colors: bool, // config: keep the client's colours in the panes
     pub show_help: bool, // true to display help overlay
     pub help_scroll: Cell<u16>, // first help line shown, on a terminal too short for all of it
     pub last_key: Option<char>, // Track last key for vi commands like 'gg'
@@ -109,6 +110,7 @@ impl AppState {
             hidden: vec![false; node_count],
             grep_mode: false,
             esc_clears_search: false,
+            client_colors: true,
             show_help: false,
             help_scroll: Cell::new(0),
             last_key: None,
@@ -131,6 +133,7 @@ impl AppState {
             hidden: vec![false; node_count],
             grep_mode: false,
             esc_clears_search: false,
+            client_colors: true,
             show_help: false,
             help_scroll: Cell::new(0),
             last_key: None,

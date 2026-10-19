@@ -5,3 +5,7 @@
 # Esc outside the search box. false: Esc only leaves zoom, and `c` clears the search and the
 # filter. true: Esc first turns the filter off, then clears the search, then leaves zoom.
 esc_clears_search = false
+
+# Pane colours. true: each line in the colours the client printed it in (a client may colour a
+# whole line by level, e.g. debug in teal). false: plain text; search terms stay highlighted.
+client_colors = true

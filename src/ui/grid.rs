@@ -121,7 +121,7 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState, net
             };
 
             // ---- HIGHLIGHT ----
-            let content = highlight_text(&text, app.highlight.as_ref().map(|v| v.as_slice()));
+            let content = highlight_text(&text, app.highlight.as_ref().map(|v| v.as_slice()), app.client_colors);
 
             // ---- RENDER ----
             let widget = Paragraph::new(content).scroll((scroll_y, 0)).block(

@@ -2,9 +2,14 @@ use crate::ui::colors::COLORS;
 use ansi_to_tui::IntoText;
 use ratatui::prelude::*;
 
-/// Pane text in the client's colours, with each search term highlighted over them
-pub fn highlight_text(text: &str, needles: Option<&[(String, usize)]>) -> Text<'static> {
+/// Pane text in the client's colours (or plain, without `colors`), with each search term
+/// highlighted over them
+pub fn highlight_text(text: &str, needles: Option<&[(String, usize)]>, colors: bool) -> Text<'static> {
     let needles = needles.unwrap_or_default();
+    let text = match colors {
+        true => text.to_string(),
+        false => strip_ansi_escapes::strip_str(text),
+    };
     Text::from(text.lines().map(|line| highlight_line(line, needles)).collect::<Vec<_>>())
 }
 
@@ -87,5 +92,13 @@ mod tests {
             [("State ", None), ("Upd", Some(bg)), ("ated", Some(bg)), (" ok", Some(Color::Reset))]
         );
         assert_eq!(line.spans[0].style.fg, Some(Color::Green));
+    }
+
+    #[test]
+    fn without_client_colors_only_the_search_terms_are_coloured() {
+        let text = highlight_text("\x1b[36mdebug line\x1b[0m", Some(&[("line".into(), 0)]), false);
+        let spans = &text.lines[0].spans;
+        assert_eq!((spans[0].content.as_ref(), spans[0].style.fg), ("debug ", None));
+        assert_eq!(spans[1].style.bg, Some(COLORS[0].1));
     }
 }
