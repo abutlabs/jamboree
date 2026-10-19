@@ -54,8 +54,9 @@ pub fn render(f: &mut Frame, node: &Node, app: &AppState, net: Option<&Net>) {
     node.resize_pty_if_needed(new_size);
 
     // Fast tail extraction with wrap calculation for focused view
-    let visible_lines = area.height.saturating_sub(2) as usize; // borders
-    let available_width = area.width.saturating_sub(2).max(1) as usize;
+    // Only a top border (the title), so a terminal selection takes no border characters
+    let visible_lines = area.height.saturating_sub(1) as usize;
+    let available_width = area.width.max(1) as usize;
 
     let raw_text = node.get_colored_tail(5_000_000);
 
@@ -102,7 +103,7 @@ pub fn render(f: &mut Frame, node: &Node, app: &AppState, net: Option<&Net>) {
                     super::grid::fault_tags(net, node),
                     super::grid::frozen_tag(app, node)
                 ))
-                .borders(Borders::ALL)
+                .borders(Borders::TOP)
                 .border_style(Style::default().fg(Color::Green)),
         )
         .wrap(Wrap { trim: false });

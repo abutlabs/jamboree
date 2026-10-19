@@ -25,6 +25,8 @@ pub struct AppState {
     pub panes: RefCell<Vec<(usize, Rect)>>,
     /// Node and time of the last click, to tell a double click
     pub last_click: Option<(usize, Instant)>,
+    /// Mouse capture off (`m`), so a plain drag selects text in the terminal
+    pub mouse_off: bool,
 }
 
 impl AppState {
@@ -116,6 +118,7 @@ impl AppState {
             last_key: None,
             panes: RefCell::new(Vec::new()),
             last_click: None,
+            mouse_off: false,
         }
     }
 
@@ -139,6 +142,7 @@ impl AppState {
             last_key: None,
             panes: RefCell::new(Vec::new()),
             last_click: None,
+            mouse_off: false,
         }
     }
 

@@ -15,6 +15,7 @@ const MATCH_HINT: &str = " [n/N] Match  [c] Clear ";
 const MATCH_HINT_ESC: &str = " [n/N] Match  [c/Esc] Clear ";
 const PAUSED_INDICATOR: &str = " [ALL FROZEN: Space resumes]";
 const GREP_INDICATOR: &str = " [FILTER ON]";
+const MOUSE_OFF_INDICATOR: &str = " [MOUSE OFF: drag selects, m restores]";
 
 /// The base menu, with Ctrl+G offered as "Show all" while the filter is on
 fn base(menu: &str, app: &AppState) -> String {
@@ -41,7 +42,12 @@ pub fn grid_menu(app: &AppState, has_tags: bool) -> String {
                 _ => "",
             };
 
-            let grep_status = if app.grep_mode { GREP_INDICATOR } else { "" };
+            let grep_status = match (app.mouse_off, app.grep_mode) {
+                (true, true) => format!("{MOUSE_OFF_INDICATOR}{GREP_INDICATOR}"),
+                (true, false) => MOUSE_OFF_INDICATOR.to_string(),
+                (false, true) => GREP_INDICATOR.to_string(),
+                (false, false) => String::new(),
+            };
 
             let match_hint = match has_tags {
                 true if app.esc_clears_search => MATCH_HINT_ESC,
@@ -72,7 +78,12 @@ pub fn focused_menu(app: &AppState, has_tags: bool) -> String {
                 _ => "",
             };
 
-            let grep_status = if app.grep_mode { GREP_INDICATOR } else { "" };
+            let grep_status = match (app.mouse_off, app.grep_mode) {
+                (true, true) => format!("{MOUSE_OFF_INDICATOR}{GREP_INDICATOR}"),
+                (true, false) => MOUSE_OFF_INDICATOR.to_string(),
+                (false, true) => GREP_INDICATOR.to_string(),
+                (false, false) => String::new(),
+            };
 
             let match_hint = match has_tags {
                 true if app.esc_clears_search => MATCH_HINT_ESC,
