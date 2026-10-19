@@ -98,6 +98,16 @@ prints either the head or which nodes are on which. Stopped nodes are left out. 
 network, give each client its own regex with a label: `--head 'polkajam=Imported (0x[0-9a-f]+)'`.
 Clients shorten hashes differently, so there capture something they print alike, such as the slot.
 
+For clients that send [JIP-3](https://github.com/polkadot-fellows/JIPs/blob/main/JIP-3.md)
+telemetry, `--head jip3` needs no regex and reads every client alike. Put
+`--telemetry {telemetry}` in `--cmd`: jamboree listens for each node's telemetry and writes each
+best block change in its pane as `[jip3] best block <slot> <hash>`.
+
+```sh
+jamboree --nodes 6 --cmd 'cd ~/src/jamixir && ./node.sh {i} --telemetry {telemetry}' \
+  --headless 3m --head jip3
+```
+
 <details>
 <summary>Head regexes for some clients</summary>
 

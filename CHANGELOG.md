@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- JIP-3 telemetry: `{telemetry}` in `--cmd` gives each node a telemetry address, its best block
+  changes show in the pane as `[jip3] best block <slot> <hash>`, and `--head jip3` checks them.
 - Panes show the client's own log colours; saved logs, search and `--head` still use plain text.
 - Fix: with `Ctrl+G`, a full pane hid its newest matching line.
 

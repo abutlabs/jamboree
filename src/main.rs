@@ -25,6 +25,7 @@ use regex::Regex;
 use std::{
     collections::BTreeMap,
     io::stdout,
+    net::TcpListener,
     path::PathBuf,
     process,
     sync::{
@@ -67,20 +68,31 @@ fn container_names(cmds: &[String], count: usize) -> Vec<Option<String>> {
         .collect()
 }
 
+/// A node's label, its `sh -c` command, its container name and its JIP-3 listener
+type NodeCommand = (String, CommandBuilder, Option<String>, Option<TcpListener>);
+
 /// One labelled `sh -c` command per node, with `{i}` replaced by the node index, `{port}` by
-/// the port it listens on (also in `$PORT` when the ports were moved) and `{container}` by its
-/// container name
+/// the port it listens on (also in `$PORT` when the ports were moved), `{container}` by its
+/// container name and `{telemetry}` by the HOST:PORT of a JIP-3 listener for it
 fn node_commands(
     cmds: &[String],
     ports: &[u16],
     moved: bool,
     containers: &[Option<String>],
-) -> Result<Vec<(String, CommandBuilder, Option<String>)>> {
+) -> Result<Vec<NodeCommand>> {
     let cwd = std::env::current_dir()?;
     (0..ports.len())
         .map(|id| {
             let (label, cmd) = utils::split_label(node_template(cmds, id));
+            let telemetry = match cmd.contains("{telemetry}") {
+                true => Some(TcpListener::bind("127.0.0.1:0")?),
+                false => None,
+            };
+            let telemetry_addr = (telemetry.as_ref())
+                .map(|l| l.local_addr().map(|a| a.to_string()))
+                .transpose()?;
             let cmd = utils::node_command(cmd, id)
+                .replace("{telemetry}", telemetry_addr.as_deref().unwrap_or_default())
                 .replace("{port}", &ports[id].to_string())
                 .replace("{container}", containers[id].as_deref().unwrap_or_default());
             let mut c = CommandBuilder::new("sh");
@@ -89,7 +101,8 @@ fn node_commands(
                 c.env("PORT", ports[id].to_string());
             }
             c.cwd(&cwd);
-            Ok((label.unwrap_or("Node").to_string(), c, containers[id].clone()))
+            let label = label.unwrap_or("Node").to_string();
+            Ok((label, c, containers[id].clone(), telemetry))
         })
         .collect()
 }
@@ -137,6 +150,13 @@ async fn main() -> Result<()> {
         let heads = (cli.head.iter())
             .map(|arg| Head::parse(arg, &labels))
             .collect::<Result<Vec<_>>>()?;
+        for (label, _, _, telemetry) in &commands {
+            let jip3 = Head::for_label(&heads, label).is_some_and(|h| h.regex.as_str() == JIP3);
+            anyhow::ensure!(
+                !jip3 || telemetry.is_some(),
+                "--head jip3 needs {{telemetry}} in the --cmd of the {label} nodes"
+            );
+        }
         Ok((commands, Some(net), faults, heads))
     };
     let (commands, net, faults, heads) = match setup() {
@@ -167,7 +187,7 @@ async fn main() -> Result<()> {
 /// Create this run's log dir with its command line in cmd.txt and its fault schedule in
 /// faults.txt, and start the nodes
 fn spawn_nodes(
-    commands: Vec<(String, CommandBuilder, Option<String>)>,
+    commands: Vec<NodeCommand>,
     faults: &[(Duration, Fault)],
 ) -> Result<(PathBuf, Vec<Node>)> {
     let datetime = Local::now().format("%Y%m%d_%H%M%S").to_string();
@@ -192,7 +212,9 @@ fn spawn_nodes(
     let nodes = commands
         .into_iter()
         .enumerate()
-        .map(|(id, (label, cmd, container))| Node::spawn(id, label, &log_dir, cmd, container))
+        .map(|(id, (label, cmd, container, telemetry))| {
+            Node::spawn(id, label, &log_dir, cmd, container, telemetry)
+        })
         .collect::<Result<Vec<Node>>>()?;
     Ok((log_dir, nodes))
 }
@@ -216,6 +238,9 @@ fn apply_due(faults: &mut Vec<(Duration, Fault)>, started: Instant, nodes: &mut 
     }
 }
 
+/// What `--head jip3` stands for: the best block lines written from the nodes' JIP-3 telemetry
+const JIP3: &str = r"\[jip3\] best block \d+ (0x[0-9a-f]{64})";
+
 /// A --head: the regex whose first group is a node's head, for one --cmd label or all nodes
 struct Head {
     label: Option<String>,
@@ -231,28 +256,28 @@ impl Head {
             }
             _ => (None, arg),
         };
-        let regex = Regex::new(pattern)?;
+        let regex = Regex::new(if pattern == "jip3" { JIP3 } else { pattern })?;
         anyhow::ensure!(
             regex.captures_len() > 1,
             "--head '{arg}' has no capture group for the head"
         );
         Ok(Head { label, regex })
     }
+
+    /// The --head for nodes with this label: the one given for the label, else the unlabelled one
+    fn for_label<'a>(heads: &'a [Head], label: &str) -> Option<&'a Head> {
+        (heads.iter().find(|h| h.label.as_deref() == Some(label)))
+            .or_else(|| heads.iter().find(|h| h.label.is_none()))
+    }
 }
 
 /// Each node's head per --head: the first group of its last matching log line. None for a node
 /// with no match, and no entry for a stopped node or one no --head applies to
 fn node_heads(nodes: &[Node], heads: &[Head]) -> Vec<(usize, Option<String>)> {
-    let for_node = |node: &Node| {
-        (heads
-            .iter()
-            .find(|h| h.label.as_deref() == Some(node.label.as_str())))
-        .or_else(|| heads.iter().find(|h| h.label.is_none()))
-    };
     (nodes.iter())
         .filter(|node| !node.is_stopped())
         .filter_map(|node| {
-            let head = for_node(node)?;
+            let head = Head::for_label(heads, &node.label)?;
             let text = node.get_text_tail(100_000);
             let last = head.regex.captures_iter(&text).last();
             Some((
@@ -266,7 +291,7 @@ fn node_heads(nodes: &[Node], heads: &[Head]) -> Vec<(usize, Option<String>)> {
 /// Run the nodes without the UI for `duration`, then wait up to `timeout` for --head to find them
 /// on one head, stop them and print a summary. Returns the exit code.
 async fn run_headless(
-    commands: Vec<(String, CommandBuilder, Option<String>)>,
+    commands: Vec<NodeCommand>,
     net: Net,
     mut faults: Vec<(Duration, Fault)>,
     duration: Duration,
@@ -355,7 +380,7 @@ async fn run_headless(
 
 async fn run_app(
     cli: Cli,
-    commands: Vec<(String, CommandBuilder, Option<String>)>,
+    commands: Vec<NodeCommand>,
     net: Option<Net>,
     mut faults: Vec<(Duration, Fault)>,
 ) -> Result<()> {
