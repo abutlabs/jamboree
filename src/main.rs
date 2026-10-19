@@ -459,7 +459,7 @@ async fn run_app(
             }
             // Render help overlay on top if active
             if app.show_help {
-                help::render(f);
+                help::render(f, app.esc_clears_search);
             }
         })?;
 
