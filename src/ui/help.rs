@@ -3,7 +3,8 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Clear},
 };
 
-pub fn render(f: &mut Frame) {
+/// The keys screen; the Esc line follows the esc_clears_search config option
+pub fn render(f: &mut Frame, esc_clears_search: bool) {
     let area = f.size();
     
     // Create a centered popup
@@ -29,7 +30,7 @@ pub fn render(f: &mut Frame) {
   ← → / h l / Tab Focus previous / next node
   click           Focus a node; click it again to zoom
   Enter / z       Zoom into the focused node
-  Esc             Back to the grid / cancel
+  Esc             {esc}
   1-6             Hide or show the 1st to 6th pane
 
   SCROLL (freezes all panes first)
@@ -64,7 +65,11 @@ pub fn render(f: &mut Frame) {
                     Press any key to close
 "#;
 
-    let paragraph = Paragraph::new(help_text)
+    let esc = match esc_clears_search {
+        true => "Filter off, then clear search, then back to grid",
+        false => "Back to the grid / cancel",
+    };
+    let paragraph = Paragraph::new(help_text.replace("{esc}", esc))
         .block(
             Block::default()
                 .title(" Help ")

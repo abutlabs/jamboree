@@ -11,6 +11,7 @@ const FOCUSED_MENU_LOG_VIEWER: &str = " [Esc] Grid  [/] Search  [^G] Filter  [?]
 const FOCUSED_MENU_NORMAL: &str = " [Esc] Grid  [/] Search  [^G] Filter  [Space] Freeze  [s] Stop  [r] Restart  [i] Isolate  [p] Split  [?] Help  [q] Quit";
 
 const MATCH_HINT: &str = " [n/N] Next/prev match  [c] Clear search ";
+const MATCH_HINT_ESC: &str = " [n/N] Next/prev match  [c/Esc] Clear search ";
 const PAUSED_INDICATOR: &str = " [FROZEN: Space resumes]";
 const PAUSED_INDICATOR_FOCUSED: &str = " [FROZEN: Space resumes]";
 const GREP_INDICATOR: &str = " [FILTER: matching lines only]";
@@ -43,6 +44,7 @@ pub fn grid_menu(app: &AppState, has_tags: bool) -> String {
             let grep_status = if app.grep_mode { GREP_INDICATOR } else { "" };
 
             let match_hint = match has_tags {
+                true if app.esc_clears_search => MATCH_HINT_ESC,
                 true => MATCH_HINT,
                 false => "",
             };
@@ -82,6 +84,7 @@ pub fn focused_menu(app: &AppState, has_tags: bool) -> String {
             };
 
             let match_hint = match has_tags {
+                true if app.esc_clears_search => MATCH_HINT_ESC,
                 true => MATCH_HINT,
                 false => "",
             };
