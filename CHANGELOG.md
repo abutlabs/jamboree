@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0
 
 - `client_colors = false` in the config file shows the panes as plain text.
 - A node given `{telemetry}` that has not connected after 60 s gets a `no JIP-3 telemetry` line
