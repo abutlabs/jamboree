@@ -20,7 +20,7 @@ pub struct Cli {
     /// Shell command that starts a node, run with `sh -c`; {i} is replaced by the node index,
     /// {port} by the port it listens on ($PORT) and {telemetry} by a HOST:PORT for its JIP-3
     /// telemetry ($TELEMETRY; `--telemetry {telemetry}`). Repeat it to run one node per command; prefix
-    /// `<label>=` to name the panes, or `<label>*K=` to run K such nodes
+    /// `<label>=` to name the panes, or `<label>[K]=` to run K such nodes
     #[arg(help_heading = "Start", long)]
     pub cmd: Vec<String>,
 
