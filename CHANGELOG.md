@@ -2,8 +2,8 @@
 
 ## Unreleased
 
-- Scrolling a pane freezes only that pane, tagged `[FROZEN: End follows]`; the others keep
-  following. `End`, `G` or `F` follows it again. `Space` still freezes all panes.
+- Scrolling a pane freezes only that pane, tagged `[FROZEN: Space resumes]`; the others keep
+  following. `Space` (or `End`, `G`, `F`) resumes it; with nothing frozen, `Space` freezes all.
 - `c` also empties the search box, and the filter turns off when no terms are left.
 - Focus skips hidden panes; hiding the focused pane moves focus on.
 - `x` no longer freezes the panes, so a node restarted after it shows its output.

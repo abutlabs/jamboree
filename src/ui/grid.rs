@@ -149,7 +149,7 @@ pub fn render(f: &mut Frame, nodes: &[Node], focused: usize, app: &AppState, net
 /// A pane frozen by scrolling it, while the others follow (Space freezing all shows in the menu)
 pub fn frozen_tag(app: &AppState, node: &Node) -> &'static str {
     match node.is_frozen() && !app.paused && !app.log_viewer_mode {
-        true => " [FROZEN: End follows]",
+        true => " [FROZEN: Space resumes]",
         false => "",
     }
 }

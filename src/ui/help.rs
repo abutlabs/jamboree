@@ -44,7 +44,7 @@ pub fn render(f: &mut Frame, esc_clears_search: bool, scroll: &Cell<u16>) {
   Home End        Top / bottom and follow again (also gg / G)
   wheel           Scroll the node under the pointer
   F               Follow the logs again
-  Space           Freeze / follow all panes
+  Space           Resume frozen panes, else freeze all
 
   SEARCH
   ─────────────────────────────────────────────────────

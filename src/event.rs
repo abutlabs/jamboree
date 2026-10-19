@@ -190,9 +190,12 @@ pub fn handle_key_event(
             Action::Continue
         }
 
-        // Freeze/unfreeze all panes; F follows the logs again, as in less
+        // Space resumes any frozen pane, else freezes all; F follows the focused pane, as in less
         KeyCode::Char(' ') if !app.log_viewer_mode => {
-            app.toggle_pause(nodes);
+            match !app.paused && nodes.iter().any(|n| n.is_frozen()) {
+                true => nodes.iter().for_each(|n| n.set_frozen(false)),
+                false => app.toggle_pause(nodes),
+            }
             Action::Continue
         }
         KeyCode::Char('F') if !app.log_viewer_mode => {

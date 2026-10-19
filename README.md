@@ -56,8 +56,9 @@ Every run is saved to `logs/<timestamp>/node_<i>.log`, with the command line in 
 
 ## Follow an event across nodes
 
-- Scrolling a pane (arrows, wheel) freezes only that pane; `End` follows its logs again. `Space`
-  freezes all panes at once, to compare them at one moment. The nodes keep running either way.
+- Scrolling a pane (arrows, wheel) freezes only that pane; `Space` resumes it. With nothing
+  frozen, `Space` freezes all panes at once, to compare them at one moment. The nodes keep
+  running either way.
 - `/` searches: it highlights up to 6 comma-separated terms in every pane, each in its own
   colour. Paste a block hash to follow it through the network. `n`/`N` jump between matches.
   In the search box, `Ctrl+W` drops the last term and `Ctrl+U` all of them.
@@ -272,7 +273,7 @@ jamboree --nodes 6 --move-ports --listen-port 41000 \
 | `1`-`6` | Hide or show node 0 to 5 |
 | `↑` `↓`, `j` `k`, PgUp/PgDn, Home, `Ctrl+D/U/F/B`, `gg`, wheel | Scroll (freezes that pane; the wheel scrolls the pane under the pointer) |
 | `End`, `G`, `F` | Follow the pane's logs again |
-| `Space` | Freeze / follow all panes |
+| `Space` | Resume frozen panes, else freeze all |
 | `/` | Search: highlight terms, comma-separated; in the box `Ctrl+W` drops the last term, `Ctrl+U` all |
 | `n` / `N` | Next / previous match |
 | `Ctrl+G` | Filter: only matching lines / show all again |

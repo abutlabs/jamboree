@@ -13,7 +13,7 @@ Examples:
   jamboree --cmd '... --telemetry {telemetry}' --headless 3m --head jip3
   jamboree --logs logs/20261018_145800
 
-Keys: arrows or h/l focus, up/down scroll a pane, End follow, Space freeze all, Enter zoom,
+Keys: arrows or h/l focus, up/down scroll a pane, Space resume or freeze all, Enter zoom,
 / search, Ctrl+G filter, c clear, s i p r stop/isolate/split/restart, ? all keys, q quit.
 Docs: https://github.com/jamixir/jamboree")]
 #[command(group(ArgGroup::new("source").required(true).args(["cmd", "log_folder", "print_config"])))]
