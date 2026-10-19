@@ -1,9 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
 - JIP-3 telemetry: `{telemetry}` in `--cmd` gives each node a telemetry address, its best block
   changes show in the pane as `[jip3] best block <slot> <hash>`, and `--head jip3` checks them.
+- `--cmd 'label*K=...'` runs K nodes from one command.
+- An unknown `{word}` in `--cmd`, such as `{prot}`, is an error before any node starts.
+- `--dry-run` prints each node's command and exits.
+- `$PORT` is always set (it was only with `--move-ports`), and `$TELEMETRY` with `{telemetry}`.
 - Panes show the client's own log colours; saved logs, search and `--head` still use plain text.
 - Fix: with `Ctrl+G`, a full pane hid its newest matching line.
 

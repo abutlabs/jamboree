@@ -46,7 +46,7 @@ fn node_count(cmds: &[String], nodes: Option<usize>) -> Result<usize> {
         (1, n) => n.unwrap_or(6),
         (len, None) => len,
         (len, Some(n)) if n == len => n,
-        (len, Some(n)) => anyhow::bail!("--nodes {} does not match the {} --cmd flags", n, len),
+        (len, Some(n)) => anyhow::bail!("--nodes {} does not match the {} nodes of the --cmd flags", n, len),
     };
     anyhow::ensure!(count > 0, "--nodes must be at least 1");
     Ok(count)
@@ -72,12 +72,11 @@ fn container_names(cmds: &[String], count: usize) -> Vec<Option<String>> {
 type NodeCommand = (String, CommandBuilder, Option<String>, Option<TcpListener>);
 
 /// One labelled `sh -c` command per node, with `{i}` replaced by the node index, `{port}` by
-/// the port it listens on (also in `$PORT` when the ports were moved), `{container}` by its
-/// container name and `{telemetry}` by the HOST:PORT of a JIP-3 listener for it
+/// the port it listens on (also `$PORT`), `{container}` by its container name and `{telemetry}`
+/// by the HOST:PORT of a JIP-3 listener for it (also `$TELEMETRY`)
 fn node_commands(
     cmds: &[String],
     ports: &[u16],
-    moved: bool,
     containers: &[Option<String>],
 ) -> Result<Vec<NodeCommand>> {
     let cwd = std::env::current_dir()?;
@@ -97,8 +96,9 @@ fn node_commands(
                 .replace("{container}", containers[id].as_deref().unwrap_or_default());
             let mut c = CommandBuilder::new("sh");
             c.args(["-c", &cmd]);
-            if moved {
-                c.env("PORT", ports[id].to_string());
+            c.env("PORT", ports[id].to_string());
+            if let Some(addr) = &telemetry_addr {
+                c.env("TELEMETRY", addr);
             }
             c.cwd(&cwd);
             let label = label.unwrap_or("Node").to_string();
@@ -132,11 +132,21 @@ async fn main() -> Result<()> {
         if cli.log_folder.is_some() {
             return Ok((Vec::new(), None, Vec::new(), Vec::new()));
         }
-        let count = node_count(&cli.cmd, cli.nodes)?;
-        let containers = container_names(&cli.cmd, count);
+        let cmds = utils::repeat_counts(&cli.cmd).map_err(anyhow::Error::msg)?;
+        for cmd in &cmds {
+            utils::check_placeholders(cmd).map_err(anyhow::Error::msg)?;
+        }
+        let count = node_count(&cmds, cli.nodes)?;
+        let containers = container_names(&cmds, count);
         let net = Net::start(&cli, count, containers.clone())?;
         let ports = net.listen_ports();
-        let commands = node_commands(&cli.cmd, ports, cli.move_ports, &containers)?;
+        let commands = node_commands(&cmds, ports, &containers)?;
+        if cli.dry_run {
+            for (id, (label, c, ..)) in commands.iter().enumerate() {
+                println!("{label} {id}: {}", c.get_argv()[2].to_string_lossy());
+            }
+            process::exit(0);
+        }
         for (_, fault) in &cli.fault {
             fault.check(count).map_err(anyhow::Error::msg)?;
         }

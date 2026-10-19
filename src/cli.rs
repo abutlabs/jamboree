@@ -18,11 +18,15 @@ Docs: https://github.com/jamixir/jamboree")]
 #[command(group(ArgGroup::new("source").required(true).args(["cmd", "log_folder"])))]
 pub struct Cli {
     /// Shell command that starts a node, run with `sh -c`; {i} is replaced by the node index,
-    /// {port} by the port it listens on and {telemetry} by a HOST:PORT for its JIP-3 telemetry
-    /// (`--telemetry {telemetry}`). Repeat it to run one node per command; prefix
-    /// `<label>=` to name the panes
+    /// {port} by the port it listens on ($PORT) and {telemetry} by a HOST:PORT for its JIP-3
+    /// telemetry ($TELEMETRY; `--telemetry {telemetry}`). Repeat it to run one node per command; prefix
+    /// `<label>=` to name the panes, or `<label>*K=` to run K such nodes
     #[arg(help_heading = "Start", long)]
     pub cmd: Vec<String>,
+
+    /// Print each node's command with the placeholders filled in, and exit
+    #[arg(help_heading = "Start", long, conflicts_with = "log_folder")]
+    pub dry_run: bool,
 
     /// Number of nodes to start (default 6, or one per --cmd); with --logs, number of files to load (default all)
     #[arg(help_heading = "Start", long)]

@@ -31,13 +31,17 @@ Built while developing [Jamixir](https://jamixir.org).
 `--cmd` runs once per node with `sh -c`. `{i}` becomes the node index (0, 1, 2, ...), and
 `--nodes` sets how many (default 6). Each node's output goes to its own pane.
 
-For a mixed network, repeat `--cmd` to run one node per command, and prefix `label=` to title
-the panes:
+For a mixed network, repeat `--cmd` to run one node per command, prefix `label=` to title
+the panes, and `label*K=` to run K nodes from one command:
 
 ```sh
-jamboree --cmd 'theirs=./their-jam-node <flags for node {i}>' \
-         --cmd 'mine=./my-jam-node <flags for node {i}>'
+jamboree --cmd 'theirs*4=./their-jam-node <flags for node {i}>' \
+         --cmd 'mine*2=./my-jam-node <flags for node {i}>'
 ```
+
+The placeholders are `{i}`, `{port}` (the port the node listens on, also `$PORT`),
+`{container}` (see Docker) and `{telemetry}` (JIP-3, see Run in CI; also `$TELEMETRY`). Any other
+`{word}` is an error. `--dry-run` prints each node's command and exits.
 
 Every run is saved to `logs/<timestamp>/node_<i>.log`, with the command line in `cmd.txt`.
 `jamboree --logs <dir>` replays any folder of `*.log` files, one pane per file.
@@ -152,8 +156,7 @@ jamboree --nodes 6 --cmd 'polkajam=polkajam --chain dev run --pvm-backend interp
 
 ```sh
 polkajam --chain dev dump-spec spec.json
-PJ='polkajam=polkajam --chain dev run --temp --dev-validator {i} --rpc-port 1980{i}'
-jamboree --cmd "$PJ" --cmd "$PJ" --cmd "$PJ" --cmd "$PJ" \
+jamboree --cmd 'polkajam*4=polkajam --chain dev run --temp --dev-validator {i} --rpc-port 1980{i}' \
   --cmd 'mine=./my-jam-node --chain spec.json --validator {i} --bootnode <polkajam node 0 address>'
 ```
 
