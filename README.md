@@ -73,6 +73,18 @@ listens there, and writes each best block change in the node's pane and log as
 for a hash follows it across a mixed network, and `--head jip3` (see below) checks the heads
 without a regex. A restarted node connects again.
 
+```sh
+# six Jamixir nodes; Ctrl+G with the search below lists each node's best blocks
+jamboree --nodes 6 --search 'best block' \
+  --cmd 'cd ~/src/jamixir && ./node.sh {i} --telemetry {telemetry}'
+
+# a mixed network: the same flag on every client that supports it
+jamboree --cmd 'theirs*4=./their-jam-node <flags for node {i}> --telemetry {telemetry}' \
+         --cmd 'mine*2=./my-jam-node <flags for node {i}> --telemetry {telemetry}'
+```
+
+`--dry-run` shows the address each node gets. For CI, see `--head jip3` below.
+
 ## Break the network
 
 This is what a tmux layout or a shell script cannot do. Focus a node (arrows or click), then:
