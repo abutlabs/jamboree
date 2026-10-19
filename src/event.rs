@@ -267,6 +267,15 @@ pub fn handle_key_event(
         }
 
         // Back to grid
+        // Leave zoom; with esc_clears_search, turn the filter off and clear the search first
+        KeyCode::Esc if app.esc_clears_search && app.grep_mode => {
+            app.toggle_grep_mode();
+            Action::Continue
+        }
+        KeyCode::Esc if app.esc_clears_search && app.highlight.is_some() => {
+            app.clear_search();
+            Action::Continue
+        }
         KeyCode::Esc => Action::ChangeView(ViewMode::Grid),
 
         _ => Action::Continue,

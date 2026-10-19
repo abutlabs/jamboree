@@ -267,15 +267,28 @@ jamboree --nodes 6 --move-ports --listen-port 41000 \
 | `1`-`6` | Hide or show the 1st to 6th pane |
 | `↑` `↓`, `j` `k`, PgUp/PgDn, Home/End, `Ctrl+D/U/F/B`, `gg` `G`, wheel | Scroll (freezes all panes first; the wheel scrolls the pane under the pointer) |
 | `Space`, `F` | Freeze / follow the logs again |
-| `/` | Search terms, comma-separated; edit the list to remove one |
+| `/` | Search: highlight terms, comma-separated; in the box `Ctrl+W` drops the last term, `Ctrl+U` all |
 | `n` / `N` | Next / previous match |
-| `Ctrl+G` | Show only matching lines |
+| `Ctrl+G` | Filter: only matching lines / show all again |
+| `c` | Clear the search and the filter |
 | `s` `i` `p` `r` | Stop, isolate, split, restart |
 | `x` | Shut down all nodes (TERM, then KILL after 3 s) |
 | `?` | Help |
 | `q` | Quit (stops all nodes first) |
 
 The mouse is on, so to select text hold Shift while dragging.
+
+### Config file
+
+Options live in `~/.config/jamboree/config.toml` (or `$XDG_CONFIG_HOME/jamboree/`). Start from
+the defaults, which come with comments:
+
+```sh
+mkdir -p ~/.config/jamboree && jamboree --print-config > ~/.config/jamboree/config.toml
+```
+
+`esc_clears_search = true` makes `Esc` turn the filter off, then clear the search, then leave
+zoom. An unknown option is an error at start.
 
 ## Licence
 

@@ -127,6 +127,10 @@ impl Drop for TerminalGuard {
 async fn main() -> Result<()> {
     // Parse CLI first, before terminal setup (so --help works properly)
     let cli = Cli::parse();
+    if cli.print_config {
+        print!("{}", cli::DEFAULT_CONFIG);
+        return Ok(());
+    }
 
     // Resolve the node commands before terminal setup (so errors print normally)
     let setup = || -> Result<_> {
@@ -401,6 +405,7 @@ async fn run_app(
     net: Option<Net>,
     mut faults: Vec<(Duration, Fault)>,
 ) -> Result<()> {
+    let config = cli::Config::load()?;
     enable_raw_mode()?;
     execute!(stdout(), EnterAlternateScreen, EnableMouseCapture, Hide)?;
     let _guard = TerminalGuard;
@@ -434,6 +439,7 @@ async fn run_app(
         (nodes, app)
     };
 
+    app.esc_clears_search = config.esc_clears_search;
     let mut focused = 0usize;
     let started = Instant::now();
 

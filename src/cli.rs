@@ -1,6 +1,7 @@
 use crate::event::{Fault, parse_duration};
 use clap::{ArgGroup, Parser};
-use std::time::Duration;
+use serde::Deserialize;
+use std::{path::PathBuf, time::Duration};
 
 #[derive(Parser, Debug)]
 #[command(name = "jamboree", version, about, max_term_width = 100, arg_required_else_help = true)]
@@ -15,7 +16,7 @@ Examples:
 Keys: arrows or h/l focus, up/down scroll, Enter zoom, Space freeze, / search,
 s i p r stop/isolate/split/restart, ? all keys, q quit.
 Docs: https://github.com/jamixir/jamboree")]
-#[command(group(ArgGroup::new("source").required(true).args(["cmd", "log_folder"])))]
+#[command(group(ArgGroup::new("source").required(true).args(["cmd", "log_folder", "print_config"])))]
 pub struct Cli {
     /// Shell command that starts a node, run with `sh -c`; {i} is replaced by the node index,
     /// {port} by the port it listens on ($PORT) and {telemetry} by a HOST:PORT for its JIP-3
@@ -23,6 +24,10 @@ pub struct Cli {
     /// `<label>=` to name the panes, or `<label>[K]=` to run K such nodes
     #[arg(help_heading = "Start", long)]
     pub cmd: Vec<String>,
+
+    /// Print the default config file (keys and options) and exit
+    #[arg(help_heading = "Start", long, exclusive = true)]
+    pub print_config: bool,
 
     /// Print each node's command with the placeholders filled in, and exit
     #[arg(help_heading = "Start", long, conflicts_with = "log_folder")]
@@ -92,4 +97,44 @@ pub struct Cli {
     /// How long --head waits for the nodes to agree after DURATION
     #[arg(help_heading = "Headless", long, value_name = "DURATION", value_parser = parse_duration, default_value = "60s", requires = "head")]
     pub timeout: Duration,
+}
+
+/// The default config file, comments included
+pub const DEFAULT_CONFIG: &str = include_str!("../config.toml");
+
+/// Options from config.toml; what the file leaves out keeps its default
+#[derive(Deserialize, Default, Debug, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+pub struct Config {
+    /// Esc also turns the filter off and clears the search before it leaves zoom
+    pub esc_clears_search: bool,
+}
+
+impl Config {
+    /// Read $XDG_CONFIG_HOME/jamboree/config.toml (default ~/.config); no file gives the defaults
+    pub fn load() -> anyhow::Result<Config> {
+        let dir = (std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from))
+            .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")));
+        let Some(path) = dir.map(|d| d.join("jamboree/config.toml")) else {
+            return Ok(Config::default());
+        };
+        match std::fs::read_to_string(&path) {
+            Ok(text) => toml::from_str(&text).map_err(|e| anyhow::anyhow!("{}: {e}", path.display())),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Config::default()),
+            Err(e) => Err(anyhow::anyhow!("{}: {e}", path.display())),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_config_file_holds_the_defaults() {
+        assert_eq!(toml::from_str::<Config>(DEFAULT_CONFIG).unwrap(), Config::default());
+        assert!(toml::from_str::<Config>("esc_clears_serch = true").is_err());
+        let set: Config = toml::from_str("esc_clears_search = true").unwrap();
+        assert!(set.esc_clears_search);
+    }
 }
