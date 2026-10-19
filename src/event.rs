@@ -28,7 +28,7 @@ pub fn handle_key_event(
     }
 
     if app.search_mode {
-        app.handle_search_key(key);
+        app.handle_search_key(key, modifiers);
         app.last_key = None;
         return Action::Continue;
     }
@@ -72,7 +72,14 @@ pub fn handle_key_event(
             Action::Continue
         }
 
-        // Grep toggle with Ctrl+G - always available; with no terms yet it asks for them
+        // Clear the search terms and the filter
+        KeyCode::Char('c') => {
+            app.clear_search();
+            Action::Continue
+        }
+
+        // Filter (only matching lines) with Ctrl+G - always available; with no terms yet it asks
+        // for them
         KeyCode::Char('g') if ctrl => {
             app.toggle_grep_mode();
             if app.grep_mode && app.highlight.is_none() {

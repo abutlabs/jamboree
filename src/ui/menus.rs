@@ -1,27 +1,39 @@
 use crate::AppState;
 
 // Menu constants
-const SEARCH_MENU: &str = " Search: {}_  [Enter] Apply  [Esc] Cancel ";
+const SEARCH_MENU: &str =
+    " Search: {}_  [Enter] Apply  [^W] Drop last term  [^U] Clear  [Esc] Cancel  (comma between terms)";
 
-const GRID_MENU_LOG_VIEWER: &str = " [←→] Node  [↑↓] Scroll  [/] Search  [Enter] Zoom  [?] Help  [q] Quit";
-const GRID_MENU_NORMAL: &str = " [←→] Node  [↑↓] Scroll  [/] Search  [Space] Freeze  [s] Stop  [r] Restart  [i] Isolate  [p] Split  [Enter] Zoom  [?] Help  [q] Quit";
+const GRID_MENU_LOG_VIEWER: &str = " [←→] Node  [↑↓] Scroll  [/] Search  [^G] Filter  [Enter] Zoom  [?] Help  [q] Quit";
+const GRID_MENU_NORMAL: &str = " [←→] Node  [↑↓] Scroll  [/] Search  [^G] Filter  [Space] Freeze  [s] Stop  [r] Restart  [i] Isolate  [p] Split  [Enter] Zoom  [?] Help  [q] Quit";
 
-const FOCUSED_MENU_LOG_VIEWER: &str = " [Esc] Grid  [/] Search  [?] Help  [q] Quit";
-const FOCUSED_MENU_NORMAL: &str = " [Esc] Grid  [/] Search  [Space] Freeze  [s] Stop  [r] Restart  [i] Isolate  [p] Split  [?] Help  [q] Quit";
+const FOCUSED_MENU_LOG_VIEWER: &str = " [Esc] Grid  [/] Search  [^G] Filter  [?] Help  [q] Quit";
+const FOCUSED_MENU_NORMAL: &str = " [Esc] Grid  [/] Search  [^G] Filter  [Space] Freeze  [s] Stop  [r] Restart  [i] Isolate  [p] Split  [?] Help  [q] Quit";
 
-const MATCH_HINT: &str = "  [n/N] Match  [^G] Only matches";
-const PAUSED_INDICATOR: &str = "  [FROZEN]";
-const PAUSED_INDICATOR_FOCUSED: &str = " [FROZEN]";
-const GREP_INDICATOR: &str = " [GREP]";
+const MATCH_HINT: &str = " [n/N] Next/prev match  [c] Clear search ";
+const PAUSED_INDICATOR: &str = " [FROZEN: Space resumes]";
+const PAUSED_INDICATOR_FOCUSED: &str = " [FROZEN: Space resumes]";
+const GREP_INDICATOR: &str = " [FILTER: matching lines only]";
+
+/// The base menu, with Ctrl+G offered as "Show all" while the filter is on
+fn base(menu: &str, app: &AppState) -> String {
+    match app.grep_mode {
+        true => menu.replace("[^G] Filter", "[^G] Show all"),
+        false => menu.to_string(),
+    }
+}
 
 pub fn grid_menu(app: &AppState, has_tags: bool) -> String {
     match app.search_mode {
         true => format!("{}", SEARCH_MENU.replace("{}", &app.search_input)),
         false => {
-            let base_menu = match app.log_viewer_mode {
-                true => GRID_MENU_LOG_VIEWER,
-                false => GRID_MENU_NORMAL,
-            };
+            let base_menu = base(
+                match app.log_viewer_mode {
+                    true => GRID_MENU_LOG_VIEWER,
+                    false => GRID_MENU_NORMAL,
+                },
+                app,
+            );
 
             let status = match (app.log_viewer_mode, app.paused) {
                 (false, true) => PAUSED_INDICATOR,
@@ -35,7 +47,8 @@ pub fn grid_menu(app: &AppState, has_tags: bool) -> String {
                 false => "",
             };
 
-            format!("{}{}{}{}", base_menu, status, grep_status, match_hint)
+            // The current state and how to undo it come first, so a narrow terminal keeps them
+            format!("{}{}{}{}", status, grep_status, match_hint, base_menu)
         }
     }
 }
@@ -44,10 +57,13 @@ pub fn focused_menu(app: &AppState, has_tags: bool) -> String {
     match app.search_mode {
         true => format!("{}", SEARCH_MENU.replace("{}", &app.search_input)),
         false => {
-            let base_menu = match app.log_viewer_mode {
-                true => FOCUSED_MENU_LOG_VIEWER,
-                false => FOCUSED_MENU_NORMAL,
-            };
+            let base_menu = base(
+                match app.log_viewer_mode {
+                    true => FOCUSED_MENU_LOG_VIEWER,
+                    false => FOCUSED_MENU_NORMAL,
+                },
+                app,
+            );
 
             let status = match (app.log_viewer_mode, app.paused) {
                 (false, true) => PAUSED_INDICATOR_FOCUSED,
@@ -70,7 +86,7 @@ pub fn focused_menu(app: &AppState, has_tags: bool) -> String {
                 false => "",
             };
 
-            format!("{} {}{}{}{}", base_menu, status, grep_status, search_indicator, match_hint)
+            format!("{}{}{}{}{}", status, grep_status, search_indicator, match_hint, base_menu)
         }
     }
 }

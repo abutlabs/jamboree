@@ -43,9 +43,12 @@ pub fn render(f: &mut Frame) {
 
   SEARCH
   ─────────────────────────────────────────────────────
-  /               Search terms, comma-separated (up to 6)
+  /               Search: highlight terms, comma-separated (up to 6)
+                  in the box: Ctrl+w drops the last term, Ctrl+u all
   n N             Next / previous match
-  Ctrl+g          Only matching lines (asks for terms if none)
+  Ctrl+g          Filter: only matching lines / show all again
+                  (asks for terms if none)
+  c               Clear the search and the filter
 
   NETWORK (focused node)
   ─────────────────────────────────────────────────────
