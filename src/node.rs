@@ -13,6 +13,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+use crate::jip3;
 use strip_ansi_escapes::strip_str;
 use tokio::task;
 
@@ -142,24 +143,18 @@ impl Node {
         });
     }
 
-    /// Read the node's JIP-3 telemetry connections on `listener`, one at a time (a restarted node
-    /// connects again), and write each best block change to its log and pane as
-    /// `[jip3] best block <slot> <hash>`
+    /// Write the node's JIP-3 telemetry events to its log and pane, as `jip3::serve` reads them
     fn listen_telemetry(&self, listener: TcpListener) {
         let buffer = self.buffer.clone();
         let paused_buffer = self.paused_buffer.clone();
         let paused = self.paused.clone();
         let log_path = self.log_path.clone();
         thread::spawn(move || {
-            for mut stream in listener.incoming().flatten() {
-                let mut log_file = (log_path.as_ref())
-                    .and_then(|p| OpenOptions::new().append(true).open(p).ok());
-                // The first message is the node information
-                let messages = std::iter::from_fn(|| read_message(&mut stream)).skip(1);
-                for line in messages.filter_map(|m| best_block(&m)) {
-                    append(&line, log_file.as_mut(), &buffer, &paused_buffer, &paused);
-                }
-            }
+            let mut log_file =
+                (log_path.as_ref()).and_then(|p| OpenOptions::new().append(true).open(p).ok());
+            jip3::serve(listener, |line| {
+                append(line, log_file.as_mut(), &buffer, &paused_buffer, &paused)
+            });
         });
     }
 
@@ -435,59 +430,9 @@ fn append(
     }
 }
 
-/// One JIP-3 message: its size as a little-endian u32, then the content
-fn read_message(stream: &mut impl Read) -> Option<Vec<u8>> {
-    let mut size = [0; 4];
-    stream.read_exact(&mut size).ok()?;
-    let size = u32::from_le_bytes(size) as usize;
-    if size > 1 << 24 {
-        return None;
-    }
-    let mut message = vec![0; size];
-    stream.read_exact(&mut message).ok()?;
-    Some(message)
-}
-
-/// The pane line for a JIP-3 "best block changed" event (timestamp u64, discriminator 11, slot
-/// u32, header hash); None for other events
-fn best_block(message: &[u8]) -> Option<String> {
-    if message.len() < 45 || message[8] != 11 {
-        return None;
-    }
-    let slot = u32::from_le_bytes(message[9..13].try_into().ok()?);
-    let hash: String = message[13..45].iter().map(|b| format!("{b:02x}")).collect();
-    Some(format!("[jip3] best block {slot} 0x{hash}\n"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn frame(content: &[u8]) -> Vec<u8> {
-        [&(content.len() as u32).to_le_bytes()[..], content].concat()
-    }
-
-    fn best_block_event(slot: u32, hash: u8) -> Vec<u8> {
-        [&7u64.to_le_bytes()[..], &[11], &slot.to_le_bytes(), &[hash; 32]].concat()
-    }
-
-    #[test]
-    fn best_block_reads_only_best_block_events() {
-        let line = best_block(&best_block_event(260, 0xab)).unwrap();
-        assert_eq!(line, format!("[jip3] best block 260 0x{}\n", "ab".repeat(32)));
-        let finalized = [&7u64.to_le_bytes()[..], &[12], &260u32.to_le_bytes(), &[0; 32]].concat();
-        assert_eq!(best_block(&finalized), None);
-        assert_eq!(best_block(&[0; 9]), None);
-    }
-
-    #[test]
-    fn read_message_splits_frames_and_stops_at_a_cut_one() {
-        let bytes = [frame(b"info"), frame(b"event"), frame(b"cut")[..5].to_vec()].concat();
-        let mut stream = &bytes[..];
-        assert_eq!(read_message(&mut stream).as_deref(), Some(&b"info"[..]));
-        assert_eq!(read_message(&mut stream).as_deref(), Some(&b"event"[..]));
-        assert_eq!(read_message(&mut stream), None);
-    }
 
     #[test]
     fn telemetry_lines_reach_the_pane_after_a_reconnect() {
@@ -497,7 +442,7 @@ mod tests {
         node.listen_telemetry(listener);
         for slot in [1, 2] {
             let mut stream = std::net::TcpStream::connect(addr).unwrap();
-            let bytes = [frame(b"node info"), frame(&best_block_event(slot, slot as u8))];
+            let bytes = [jip3::frame(b"node info"), jip3::frame(&jip3::best_block_event(slot, slot as u8))];
             stream.write_all(&bytes.concat()).unwrap();
         }
         let deadline = Instant::now() + Duration::from_secs(5);
