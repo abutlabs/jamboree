@@ -85,7 +85,7 @@ pub struct Cli {
     /// With --headless, check at the end that all nodes are on the same head: the first group
     /// that REGEX captures in each node's last matching log line. Prefix `<label>=` to apply it
     /// to that --cmd label's nodes only. `jip3` as REGEX takes the best block from the nodes'
-    /// JIP-3 telemetry instead. Repeatable
+    /// JIP-3 telemetry instead, `jip3-final` the finalized block. Repeatable
     #[arg(help_heading = "Headless", long, value_name = "[LABEL=]REGEX", requires = "headless")]
     pub head: Vec<String>,
 

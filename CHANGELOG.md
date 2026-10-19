@@ -4,6 +4,8 @@
 
 - `--cmd 'label[K]=...'` (or `[K]=` without a label) runs K nodes from one command; it replaces
   `label*K=`.
+- JIP-3: finalized block, sync status, failed authoring, verification and execution, and
+  misbehaving peers also show in the panes; `--head jip3-final` checks the finalized block.
 
 ## 0.3.0
 

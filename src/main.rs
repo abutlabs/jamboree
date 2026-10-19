@@ -1,6 +1,7 @@
 mod app;
 mod cli;
 mod event;
+mod jip3;
 mod net;
 mod node;
 mod ui;
@@ -161,9 +162,9 @@ async fn main() -> Result<()> {
             .map(|arg| Head::parse(arg, &labels))
             .collect::<Result<Vec<_>>>()?;
         for (label, _, _, telemetry) in &commands {
-            let jip3 = Head::for_label(&heads, label).is_some_and(|h| h.regex.as_str() == JIP3);
+            let head = Head::for_label(&heads, label).map(|h| h.regex.as_str());
             anyhow::ensure!(
-                !jip3 || telemetry.is_some(),
+                !matches!(head, Some(JIP3 | JIP3_FINAL)) || telemetry.is_some(),
                 "--head jip3 needs {{telemetry}} in the --cmd of the {label} nodes"
             );
         }
@@ -248,8 +249,10 @@ fn apply_due(faults: &mut Vec<(Duration, Fault)>, started: Instant, nodes: &mut 
     }
 }
 
-/// What `--head jip3` stands for: the best block lines written from the nodes' JIP-3 telemetry
+/// What `--head jip3` and `--head jip3-final` stand for: the best and finalized block lines
+/// written from the nodes' JIP-3 telemetry
 const JIP3: &str = r"\[jip3\] best block \d+ (0x[0-9a-f]{64})";
+const JIP3_FINAL: &str = r"\[jip3\] finalized \d+ (0x[0-9a-f]{64})";
 
 /// A --head: the regex whose first group is a node's head, for one --cmd label or all nodes
 struct Head {
@@ -266,7 +269,11 @@ impl Head {
             }
             _ => (None, arg),
         };
-        let regex = Regex::new(if pattern == "jip3" { JIP3 } else { pattern })?;
+        let regex = Regex::new(match pattern {
+            "jip3" => JIP3,
+            "jip3-final" => JIP3_FINAL,
+            _ => pattern,
+        })?;
         anyhow::ensure!(
             regex.captures_len() > 1,
             "--head '{arg}' has no capture group for the head"

@@ -70,10 +70,19 @@ only the first N files.
 
 For clients that send [JIP-3](https://github.com/polkadot-fellows/JIPs/blob/main/JIP-3.md)
 telemetry, put `--telemetry {telemetry}` in `--cmd`. jamboree gives each node its own address,
-listens there, and writes each best block change in the node's pane and log as
-`[jip3] best block <slot> <hash>`. These lines look the same for every client, so one search
-for a hash follows it across a mixed network, and `--head jip3` (see below) checks the heads
-without a regex. A restarted node connects again.
+listens there, and writes these events in the node's pane and log:
+
+| Event | Line |
+| --- | --- |
+| Best block changed | `[jip3] best block <slot> <hash>` |
+| Finalized block changed | `[jip3] finalized <slot> <hash>` |
+| Sync status changed | `[jip3] in sync: yes` or `no` |
+| Authoring, block verification or block execution failed | `[jip3] block verification failed: <reason>` |
+| Peer misbehaved | `[jip3] peer misbehaved: <first 4 bytes of its peer ID>: <reason>` |
+
+These lines look the same for every client, so one search follows a hash or a failure across
+a mixed network, and `--head jip3` (see below) checks the heads without a regex. A restarted
+node connects again.
 
 ```sh
 # six Jamixir nodes; Ctrl+G with the search below lists each node's best blocks
@@ -136,7 +145,7 @@ network, give each client its own regex with a label: `--head 'polkajam=Imported
 Clients shorten hashes differently, so there capture something they print alike, such as the slot.
 
 With [JIP-3 telemetry](#jip-3-telemetry), `--head jip3` needs no regex and reads every client
-alike:
+alike. `--head jip3-final` checks the finalized block instead, which can no longer reorg:
 
 ```sh
 jamboree --nodes 6 --cmd 'cd ~/src/jamixir && ./node.sh {i} --telemetry {telemetry}' \
