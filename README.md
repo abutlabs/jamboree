@@ -159,8 +159,14 @@ jamboree --nodes 6 --cmd '...' --delay 100ms --jitter 20ms --loss 1
 | `--jitter 20ms` | Varies that delay by up to 20ms either way (80-120ms), so packets can arrive out of order |
 | `--loss 1` | Drops 1% of the packets at random |
 
-They combine with the fault keys, `--fault` and `--chaos`, for example to test a split on a
-slow network.
+Faults (the keys, `--fault`, `--chaos`) apply on top: while a split or isolation is on, the
+packets between cut-off nodes are dropped, and the rest still get the delay and loss. For
+example, a split and heal on a slow, lossy network:
+
+```sh
+jamboree --nodes 6 --cmd '...' --delay 100ms --jitter 20ms --loss 1 \
+  --fault '60s split 0,1,2/3,4,5' --fault '120s heal'
+```
 
 ## Run in CI
 
