@@ -76,11 +76,9 @@ pub fn render(f: &mut Frame, node: &Node, app: &AppState, net: Option<&Net>) {
         })
         .sum();
 
-    let paused = *node.paused.lock().unwrap();
-
     let max_scroll = total_wrapped_lines.saturating_sub(visible_lines).min(10000) as u16;
 
-    let scroll_y = if app.paused || app.log_viewer_mode {
+    let scroll_y = if node.is_frozen() || app.log_viewer_mode {
         // Clamp stored scroll to actual max and update stored value
         let stored = app.frozen_scroll.borrow()[node.id];
         let clamped = stored.min(max_scroll);
@@ -102,7 +100,7 @@ pub fn render(f: &mut Frame, node: &Node, app: &AppState, net: Option<&Net>) {
                     node.label,
                     node.id,
                     super::grid::fault_tags(net, node),
-                    if paused { " [FROZEN]" } else { "" }
+                    super::grid::frozen_tag(app, node)
                 ))
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Green)),

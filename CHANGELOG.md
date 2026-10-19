@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.0
+
+- Scrolling a pane freezes only that pane, tagged `[FROZEN: Space resumes]`; the others keep
+  following. `Space` (or `End`, `G`, `F`) resumes it; with nothing frozen, `Space` freezes all.
+- `c` also empties the search box, and the filter turns off when no terms are left.
+- Focus skips hidden panes; hiding the focused pane moves focus on.
+- `x` no longer freezes the panes, so a node restarted after it shows its output.
+- The help scrolls with the arrows on a short terminal; the menu starts with `[?] Help  [q] Quit`
+  and has shorter state hints, so they fit in 80 columns.
+- Setup errors exit 2, so CI can tell them from different heads (1). `--dry-run` runs every
+  setup check first.
+- `--chaos` warns when the run is too short for any fault; `--logs` names a folder it can't read.
+
 ## 0.4.1
 
 - `Ctrl+G` with no search terms opens the search box, so typed terms no longer reach the node keys.

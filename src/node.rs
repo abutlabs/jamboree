@@ -249,7 +249,19 @@ impl Node {
         }
     }
 
-    pub fn flush_paused_buffer(&self) {
+    /// Freeze the pane (new output waits aside) or follow the logs again
+    pub fn set_frozen(&self, frozen: bool) {
+        *self.paused.lock().unwrap() = frozen;
+        if !frozen {
+            self.flush_paused_buffer();
+        }
+    }
+
+    pub fn is_frozen(&self) -> bool {
+        *self.paused.lock().unwrap()
+    }
+
+    fn flush_paused_buffer(&self) {
         let mut paused = self.paused_buffer.lock().unwrap();
         if paused.is_empty() {
             return;

@@ -20,9 +20,16 @@ pub fn handle_key_event(
     nodes: &mut [Node],
     net: Option<&Net>,
 ) -> Action {
-    // If help is showing, any key closes it
+    // If help is showing, the arrow and page keys scroll it and any other key closes it
     if app.show_help {
-        app.show_help = false;
+        let at = app.help_scroll.get();
+        match key {
+            KeyCode::Up | KeyCode::Char('k') => app.help_scroll.set(at.saturating_sub(1)),
+            KeyCode::Down | KeyCode::Char('j') => app.help_scroll.set(at + 1),
+            KeyCode::PageUp => app.help_scroll.set(at.saturating_sub(10)),
+            KeyCode::PageDown => app.help_scroll.set(at + 10),
+            _ => app.show_help = false,
+        }
         app.last_key = None;
         return Action::Continue;
     }
@@ -33,22 +40,20 @@ pub fn handle_key_event(
         return Action::Continue;
     }
 
-    // Check if scrolling is allowed (paused or log viewer mode)
-    let can_scroll = app.paused || app.log_viewer_mode;
     let ctrl = modifiers.contains(KeyModifiers::CONTROL);
 
-    // Vi scroll keys auto-pause first
+    // Scroll keys freeze the focused pane first; the others keep following
     let vi_scroll = match key {
         KeyCode::Char('g') => !ctrl && app.last_key == Some('g'),
-        KeyCode::Char('G' | 'j' | 'k') => true,
+        KeyCode::Char('j' | 'k') => true,
         KeyCode::Char('d' | 'u' | 'f' | 'b') => ctrl,
         KeyCode::Char('n' | 'N') => app.highlight.is_some(),
         KeyCode::Up | KeyCode::Down | KeyCode::PageUp | KeyCode::PageDown => true,
-        KeyCode::Home | KeyCode::End => true,
+        KeyCode::Home => true,
         _ => false,
     };
-    if vi_scroll && !can_scroll {
-        app.toggle_pause(nodes);
+    if vi_scroll && !app.log_viewer_mode {
+        nodes[*focused].set_frozen(true);
     }
 
     // Main key handling
@@ -62,13 +67,10 @@ pub fn handle_key_event(
         // Search - always available
         KeyCode::Char('/') => {
             app.search_mode = true;
-            if let Some(ref terms) = app.highlight {
-                app.search_input = terms
-                    .iter()
-                    .map(|(term, _)| term.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-            }
+            app.search_input = (app.highlight.iter().flatten())
+                .map(|(term, _)| term.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
             Action::Continue
         }
 
@@ -100,9 +102,9 @@ pub fn handle_key_event(
             return Action::Continue; // Return early to preserve last_key
         }
 
-        // Vi: G - go to bottom
+        // Vi: G - go to bottom, where a frozen pane follows the logs again
         KeyCode::Char('G') => {
-            app.scroll_to_bottom(*focused);
+            to_bottom(app, nodes, *focused);
             Action::Continue
         }
 
@@ -184,17 +186,20 @@ pub fn handle_key_event(
             Action::Continue
         }
         KeyCode::End => {
-            app.scroll_to_bottom(*focused);
+            to_bottom(app, nodes, *focused);
             Action::Continue
         }
 
-        // Freeze/unfreeze all panes; F follows the logs again, as in less
+        // Space resumes any frozen pane, else freezes all; F follows the focused pane, as in less
         KeyCode::Char(' ') if !app.log_viewer_mode => {
-            app.toggle_pause(nodes);
+            match !app.paused && nodes.iter().any(|n| n.is_frozen()) {
+                true => nodes.iter().for_each(|n| n.set_frozen(false)),
+                false => app.toggle_pause(nodes),
+            }
             Action::Continue
         }
-        KeyCode::Char('F') if app.paused && !app.log_viewer_mode => {
-            app.toggle_pause(nodes);
+        KeyCode::Char('F') if !app.log_viewer_mode => {
+            to_bottom(app, nodes, *focused);
             Action::Continue
         }
 
@@ -235,33 +240,36 @@ pub fn handle_key_event(
             Action::Continue
         }
 
-        // Shutdown
+        // Shut down every node; the panes keep their logs
         KeyCode::Char('x') if !app.log_viewer_mode => {
-            app.shutdown_all_nodes(nodes);
+            node::stop_all(nodes, Duration::from_secs(3));
             Action::Continue
         }
 
         // Quit
         KeyCode::Char('q') => Action::Quit,
 
-        // Focus the next or previous node
+        // Focus the next or previous visible node
         KeyCode::Tab | KeyCode::Right | KeyCode::Char('l') => {
-            *focused = (*focused + 1) % nodes.len();
+            *focused = next_visible(app, *focused, 1);
             Action::Continue
         }
         KeyCode::BackTab | KeyCode::Left | KeyCode::Char('h') => {
-            *focused = (*focused + nodes.len() - 1) % nodes.len();
+            *focused = next_visible(app, *focused, app.hidden.len() - 1);
             Action::Continue
         }
 
         // Zoom
         KeyCode::Enter | KeyCode::Char('z') => Action::ChangeView(ViewMode::Zoomed),
 
-        // Pane visibility toggle: 1 is the first pane
+        // Hide or show node 0-5 (keys 1-6); focus moves off a pane that is hidden
         KeyCode::Char(c @ '1'..='6') => {
             let idx = (c as usize) - ('1' as usize);
             if idx < nodes.len() {
                 app.hidden[idx] = !app.hidden[idx];
+                if app.hidden[*focused] {
+                    *focused = next_visible(app, *focused, 1);
+                }
             }
             Action::Continue
         }
@@ -289,8 +297,26 @@ pub fn handle_key_event(
     action
 }
 
+/// The first visible node `step` places along from `from` (step 1 = next, len - 1 = previous),
+/// or `from` itself when every other pane is hidden
+fn next_visible(app: &AppState, from: usize, step: usize) -> usize {
+    let n = app.hidden.len();
+    (1..n)
+        .map(|k| (from + k * step) % n)
+        .find(|&i| !app.hidden[i])
+        .unwrap_or(from)
+}
+
+/// The end of the log: a pane frozen alone follows again; under Space every pane stays frozen
+fn to_bottom(app: &mut AppState, nodes: &[Node], idx: usize) {
+    match app.paused || app.log_viewer_mode {
+        true => app.scroll_to_bottom(idx),
+        false => nodes[idx].set_frozen(false),
+    }
+}
+
 /// Click focuses a pane and a second click on it zooms; the wheel scrolls the pane under the
-/// pointer, freezing the panes first
+/// pointer, freezing that pane first
 pub fn handle_mouse_event(
     mouse: MouseEvent,
     app: &mut AppState,
@@ -326,8 +352,8 @@ pub fn handle_mouse_event(
             None => return Action::Continue,
         }
     }
-    if !app.paused && !app.log_viewer_mode {
-        app.toggle_pause(nodes);
+    if !app.log_viewer_mode {
+        nodes[*focused].set_frozen(true);
     }
     app.scroll_delta(*focused, scroll);
     Action::Continue
