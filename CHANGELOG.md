@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0
 
 - Scrolling a pane freezes only that pane, tagged `[FROZEN: Space resumes]`; the others keep
   following. `Space` (or `End`, `G`, `F`) resumes it; with nothing frozen, `Space` freezes all.
