@@ -72,9 +72,12 @@ pub fn handle_key_event(
             Action::Continue
         }
 
-        // Grep toggle with Ctrl+G - always available
+        // Grep toggle with Ctrl+G - always available; with no terms yet it asks for them
         KeyCode::Char('g') if ctrl => {
             app.toggle_grep_mode();
+            if app.grep_mode && app.highlight.is_none() {
+                app.search_mode = true;
+            }
             Action::Continue
         }
 

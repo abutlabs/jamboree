@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `Ctrl+G` with no search terms opens the search box, so typed terms no longer reach the node keys.
+
 ## 0.4.0
 
 - `--cmd 'label[K]=...'` (or `[K]=` without a label) runs K nodes from one command; it replaces
