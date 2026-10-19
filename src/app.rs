@@ -16,6 +16,7 @@ pub struct AppState {
     pub search_input: String,
     pub highlight: Option<Vec<(String, usize)>>, // Multiple search terms with color index (max 6)
     pub grep_mode: bool, // true to filter lines (grep), false to only highlight
+    pub esc_clears_search: bool, // config: Esc turns the filter off and clears the search first
     pub show_help: bool, // true to display help overlay
     pub last_key: Option<char>, // Track last key for vi commands like 'gg'
     /// Where each pane was drawn, by node index, for the mouse
@@ -106,6 +107,7 @@ impl AppState {
             highlight,
             hidden: vec![false; node_count],
             grep_mode: false,
+            esc_clears_search: false,
             show_help: false,
             last_key: None,
             panes: RefCell::new(Vec::new()),
@@ -126,6 +128,7 @@ impl AppState {
             highlight,
             hidden: vec![false; node_count],
             grep_mode: false,
+            esc_clears_search: false,
             show_help: false,
             last_key: None,
             panes: RefCell::new(Vec::new()),

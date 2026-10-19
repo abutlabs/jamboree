@@ -1,0 +1,7 @@
+# jamboree options, read from ~/.config/jamboree/config.toml (or $XDG_CONFIG_HOME/jamboree/).
+# Write this file there with: jamboree --print-config > ~/.config/jamboree/config.toml
+# Anything left out keeps the value shown here.
+
+# Esc outside the search box. false: Esc only leaves zoom, and `c` clears the search and the
+# filter. true: Esc first turns the filter off, then clears the search, then leaves zoom.
+esc_clears_search = false

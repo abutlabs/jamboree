@@ -18,3 +18,5 @@ chrono = "0.4"
 clap = { version = "4", features = ["derive", "wrap_help"] }
 socket2 = { version = "0.6", features = ["all"] }
 ansi-to-tui = "4"
+serde = { version = "1.0.229", features = ["derive"] }
+toml = "1.1.8"
