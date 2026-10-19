@@ -45,7 +45,7 @@ pub fn render(f: &mut Frame) {
   ─────────────────────────────────────────────────────
   /               Search terms, comma-separated (up to 6)
   n N             Next / previous match
-  Ctrl+g          Only matching lines
+  Ctrl+g          Only matching lines (asks for terms if none)
 
   NETWORK (focused node)
   ─────────────────────────────────────────────────────

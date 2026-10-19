@@ -58,7 +58,7 @@ Every run is saved to `logs/<timestamp>/node_<i>.log`, with the command line in 
 
 - `Space` freezes all panes at once (the nodes keep running), so you can scroll each one.
 - `/` highlights up to 6 terms in every pane, each in its own colour. Paste a block hash
-  to follow it through the network. `n`/`N` jump between matches, `Ctrl+G` hides other lines.
+  to follow it through the network. `n`/`N` jump between matches, `Ctrl+G` hides other lines (and asks for terms if there are none).
 - `Enter` zooms into the focused pane, `Esc` goes back, `1`-`6` hide or show the 1st to 6th pane.
 - `--search 'error,warning'` sets the terms at start, also with `--logs`.
 
