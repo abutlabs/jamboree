@@ -29,18 +29,25 @@ pub fn split_label(cmd: &str) -> (Option<&str>, &str) {
     }
 }
 
-/// Each `<label>*K=` command as K copies of `<label>=`; others unchanged
+/// Each `<label>[K]=` command as K copies of `<label>=`, and `[K]=` as K copies of the command;
+/// others unchanged
 pub fn repeat_counts(cmds: &[String]) -> Result<Vec<String>, String> {
     let mut out = Vec::new();
     for cmd in cmds {
         let repeat = (cmd.split_once('='))
-            .and_then(|(prefix, rest)| Some((prefix.rsplit_once('*')?, rest)))
-            .filter(|((label, _), rest)| split_label(&format!("{label}={rest}")).0.is_some());
+            .and_then(|(prefix, rest)| Some((prefix.strip_suffix(']')?.split_once('[')?, rest)))
+            .filter(|((label, _), rest)| {
+                label.is_empty() || split_label(&format!("{label}={rest}")).0.is_some()
+            });
         match repeat {
             Some(((label, count), rest)) => {
                 let count: usize = (count.parse().ok().filter(|&k| k > 0))
-                    .ok_or(format!("--cmd '{label}*{count}=': the count must be a number above 0"))?;
-                out.extend(std::iter::repeat_n(format!("{label}={rest}"), count));
+                    .ok_or(format!("--cmd '{label}[{count}]=': the count must be a number above 0"))?;
+                let cmd = match label {
+                    "" => rest.to_string(),
+                    _ => format!("{label}={rest}"),
+                };
+                out.extend(std::iter::repeat_n(cmd, count));
             }
             None => out.push(cmd.clone()),
         }
@@ -92,12 +99,13 @@ mod tests {
 
     #[test]
     fn repeat_counts_copies_a_counted_label() {
-        let cmds = ["pj*2=pj {i}".to_string(), "mine=./n --x=1*2".to_string()];
-        assert_eq!(repeat_counts(&cmds).unwrap(), ["pj=pj {i}", "pj=pj {i}", "mine=./n --x=1*2"]);
-        let plain = ["./n --a*2=b".to_string(), "RUST_LOG*2=x".to_string()];
+        let cmds = ["pj[2]=pj {i}", "[2]=./n {i}", "mine=./n --x=[1]"].map(String::from);
+        let expected = ["pj=pj {i}", "pj=pj {i}", "./n {i}", "./n {i}", "mine=./n --x=[1]"];
+        assert_eq!(repeat_counts(&cmds).unwrap(), expected);
+        let plain = ["./n --a[2]=b", "RUST_LOG[2]=x", "./n"].map(String::from);
         assert_eq!(repeat_counts(&plain).unwrap(), plain);
-        assert!(repeat_counts(&["pj*0=pj".to_string()]).is_err());
-        assert!(repeat_counts(&["pj*x=pj".to_string()]).is_err());
+        assert!(repeat_counts(&["pj[0]=pj".to_string()]).is_err());
+        assert!(repeat_counts(&["pj[x]=pj".to_string()]).is_err());
     }
 
     #[test]

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- `--cmd 'label[K]=...'` (or `[K]=` without a label) runs K nodes from one command; it replaces
+  `label*K=`.
+
 ## 0.3.0
 
 - JIP-3 telemetry: `{telemetry}` in `--cmd` gives each node a telemetry address, its best block

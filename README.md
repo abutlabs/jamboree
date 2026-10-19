@@ -32,12 +32,14 @@ Built while developing [Jamixir](https://jamixir.org).
 `--nodes` sets how many (default 6). Each node's output goes to its own pane.
 
 For a mixed network, repeat `--cmd` to run one node per command, prefix `label=` to title
-the panes, and `label*K=` to run K nodes from one command:
+the panes, and `label[K]=` to run K nodes from one command (`[K]=` without a label):
 
 ```sh
-jamboree --cmd 'theirs*4=./their-jam-node <flags for node {i}>' \
-         --cmd 'mine*2=./my-jam-node <flags for node {i}>'
+jamboree --cmd 'theirs[4]=./their-jam-node <flags for node {i}>' \
+         --cmd 'mine[2]=./my-jam-node <flags for node {i}>'
 ```
+
+That is six nodes: `theirs 0` to `theirs 3`, then `mine 4` and `mine 5`.
 
 The placeholders are `{i}`, `{port}` (the port the node listens on, also `$PORT`),
 `{container}` (see Docker) and `{telemetry}` (see JIP-3 telemetry, also `$TELEMETRY`). Any other
@@ -79,8 +81,8 @@ jamboree --nodes 6 --search 'best block' \
   --cmd 'cd ~/src/jamixir && ./node.sh {i} --telemetry {telemetry}'
 
 # a mixed network: the same flag on every client that supports it
-jamboree --cmd 'theirs*4=./their-jam-node <flags for node {i}> --telemetry {telemetry}' \
-         --cmd 'mine*2=./my-jam-node <flags for node {i}> --telemetry {telemetry}'
+jamboree --cmd 'theirs[4]=./their-jam-node <flags for node {i}> --telemetry {telemetry}' \
+         --cmd 'mine[2]=./my-jam-node <flags for node {i}> --telemetry {telemetry}'
 ```
 
 `--dry-run` shows the address each node gets. For CI, see `--head jip3` below.
@@ -185,7 +187,7 @@ jamboree --nodes 6 --cmd 'polkajam=polkajam --chain dev run --pvm-backend interp
 
 ```sh
 polkajam --chain dev dump-spec spec.json
-jamboree --cmd 'polkajam*4=polkajam --chain dev run --temp --dev-validator {i} --rpc-port 1980{i}' \
+jamboree --cmd 'polkajam[4]=polkajam --chain dev run --temp --dev-validator {i} --rpc-port 1980{i}' \
   --cmd 'mine=./my-jam-node --chain spec.json --validator {i} --bootnode <polkajam node 0 address>'
 ```
 
