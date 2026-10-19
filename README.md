@@ -7,7 +7,7 @@
 For milestone M2, JAM client teams run testnets of many nodes, often from different clients.
 jamboree starts them all from one command, shows their live logs in one terminal grid and
 saves every log. It can also stop, isolate, split or restart nodes, which is where many of
-the hard bugs show up.
+the hard bugs show up. Saved logs, from jamboree or anywhere else, open in the same grid.
 
 <img src="assets/demo.gif" alt="jamboree with four Jamixir nodes: each pane lists the blocks its node imported; splitting the network gives the two halves different heads, and healing it brings all four back to one head">
 
@@ -40,11 +40,10 @@ jamboree --cmd 'theirs*4=./their-jam-node <flags for node {i}>' \
 ```
 
 The placeholders are `{i}`, `{port}` (the port the node listens on, also `$PORT`),
-`{container}` (see Docker) and `{telemetry}` (JIP-3, see Run in CI; also `$TELEMETRY`). Any other
+`{container}` (see Docker) and `{telemetry}` (see JIP-3 telemetry, also `$TELEMETRY`). Any other
 `{word}` is an error. `--dry-run` prints each node's command and exits.
 
 Every run is saved to `logs/<timestamp>/node_<i>.log`, with the command line in `cmd.txt`.
-`jamboree --logs <dir>` replays any folder of `*.log` files, one pane per file.
 
 ## Follow an event across nodes
 
@@ -53,6 +52,26 @@ Every run is saved to `logs/<timestamp>/node_<i>.log`, with the command line in 
   to follow it through the network. `n`/`N` jump between matches, `Ctrl+G` hides other lines.
 - `Enter` zooms into the focused pane, `Esc` goes back, `1`-`6` hide or show the 1st to 6th pane.
 - `--search 'error,warning'` sets the terms at start, also with `--logs`.
+
+## Read saved logs
+
+```sh
+jamboree --logs logs/20261018_145800
+```
+
+`--logs` opens any folder of `*.log` files, one pane per file in natural order (`node_2` before
+`node_10`): a past jamboree run, logs from CI, or files collected from other machines. Search,
+`Ctrl+G`, zoom and scrolling work as in a live run; the network keys do not. `--nodes N` opens
+only the first N files.
+
+## JIP-3 telemetry
+
+For clients that send [JIP-3](https://github.com/polkadot-fellows/JIPs/blob/main/JIP-3.md)
+telemetry, put `--telemetry {telemetry}` in `--cmd`. jamboree gives each node its own address,
+listens there, and writes each best block change in the node's pane and log as
+`[jip3] best block <slot> <hash>`. These lines look the same for every client, so one search
+for a hash follows it across a mixed network, and `--head jip3` (see below) checks the heads
+without a regex. A restarted node connects again.
 
 ## Break the network
 
@@ -102,10 +121,8 @@ prints either the head or which nodes are on which. Stopped nodes are left out. 
 network, give each client its own regex with a label: `--head 'polkajam=Imported (0x[0-9a-f]+)'`.
 Clients shorten hashes differently, so there capture something they print alike, such as the slot.
 
-For clients that send [JIP-3](https://github.com/polkadot-fellows/JIPs/blob/main/JIP-3.md)
-telemetry, `--head jip3` needs no regex and reads every client alike. Put
-`--telemetry {telemetry}` in `--cmd`: jamboree listens for each node's telemetry and writes each
-best block change in its pane as `[jip3] best block <slot> <hash>`.
+With [JIP-3 telemetry](#jip-3-telemetry), `--head jip3` needs no regex and reads every client
+alike:
 
 ```sh
 jamboree --nodes 6 --cmd 'cd ~/src/jamixir && ./node.sh {i} --telemetry {telemetry}' \
