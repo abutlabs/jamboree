@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
 
 - `--cmd 'label[K]=...'` (or `[K]=` without a label) runs K nodes from one command; it replaces
   `label*K=`.

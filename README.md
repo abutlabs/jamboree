@@ -133,27 +133,23 @@ between nodes by 80-120ms and drops 1% of them, in each direction, for the whole
 `--head`, it checks that every node ended on the same head and exits 1 if not:
 
 ```sh
-jamboree --nodes 6 --cmd 'cd ~/src/jamixir && ./node.sh {i}' \
-  --fault '60s split 0,1,2,3/4,5' --fault '120s heal' \
-  --headless 3m --head 'State Updated successfully\. H: (0x[0-9a-f]{64})'
-```
-
-The head is what the regex's first group captures in each node's last matching log line.
-After DURATION, jamboree waits up to `--timeout` (default 60s) for all nodes to agree, then
-prints either the head or which nodes are on which. Stopped nodes are left out. For a mixed
-network, give each client its own regex with a label: `--head 'polkajam=Imported (0x[0-9a-f]+)'`.
-Clients shorten hashes differently, so there capture something they print alike, such as the slot.
-
-With [JIP-3 telemetry](#jip-3-telemetry), `--head jip3` needs no regex and reads every client
-alike. `--head jip3-final` checks the finalized block instead, which can no longer reorg:
-
-```sh
 jamboree --nodes 6 --cmd 'cd ~/src/jamixir && ./node.sh {i} --telemetry {telemetry}' \
+  --fault '60s split 0,1,2,3/4,5' --fault '120s heal' \
   --headless 3m --head jip3
 ```
 
+`--head jip3` takes each node's last best block from its [JIP-3 telemetry](#jip-3-telemetry),
+so it reads every client alike; `--head jip3-final` takes the finalized block, which can no
+longer reorg. After DURATION, jamboree waits up to `--timeout` (default 60s) for all nodes to
+agree, then prints either the head or which nodes are on which. Stopped nodes are left out.
+
+For a client without telemetry, give a regex instead: the head is what its first group captures
+in the node's last matching log line, e.g. `--head 'Imported (0x[0-9a-f]+)'`. For a mixed
+network, give each client its own regex with a label: `--head 'polkajam=Imported (0x[0-9a-f]+)'`.
+Clients shorten hashes differently, so there capture something they print alike, such as the slot.
+
 <details>
-<summary>Head regexes for some clients</summary>
+<summary>Head regexes for clients without telemetry</summary>
 
 | Client | `--head` |
 | --- | --- |

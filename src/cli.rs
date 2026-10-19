@@ -9,7 +9,7 @@ Examples:
   jamboree --nodes 6 --cmd 'cd ~/src/jamixir && ./node.sh {i}'
   jamboree --cmd 'theirs=./their-node {i}' --cmd 'mine=./my-node {i}'
   jamboree --cmd '...' --fault '60s split 0,1,2/3,4,5' --fault '120s heal'
-  jamboree --cmd '...' --headless 3m --head 'Imported (0x[0-9a-f]+)'
+  jamboree --cmd '... --telemetry {telemetry}' --headless 3m --head jip3
   jamboree --logs logs/20261018_145800
 
 Keys: arrows or h/l focus, up/down scroll, Enter zoom, Space freeze, / search,
