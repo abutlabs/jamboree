@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The help fits short terminals: no banner, two columns when one is too tall, and it scrolls
+  only when neither fits. Shift+drag text selection is listed under NODES.
+
 ## 0.6.0
 
 - `client_colors = false` in the config file shows the panes as plain text.

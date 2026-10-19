@@ -2,94 +2,105 @@ use std::cell::Cell;
 
 use ratatui::{
     prelude::*,
-    widgets::{Block, Borders, Paragraph, Clear},
+    widgets::{Block, Borders, Clear, Paragraph},
 };
 
-/// The keys screen; the Esc line follows the esc_clears_search config option, and a terminal
-/// too short for it scrolls it from `scroll`
+/// The keys, by section; `{esc}` follows the esc_clears_search config option
+const SECTIONS: [(&str, &[(&str, &str)]); 4] = [
+    ("NODES", &[
+        ("← → h l Tab", "Focus previous / next node"),
+        ("click", "Focus a node; double-click to zoom"),
+        ("Shift+drag", "Select text (Option+drag in iTerm2)"),
+        ("Enter z", "Zoom into the focused node"),
+        ("Esc", "{esc}"),
+        ("1-6", "Hide or show node 0 to 5"),
+    ]),
+    ("SCROLL (freezes the focused pane; others follow)", &[
+        ("↑ ↓ j k", "One line"),
+        ("PgUp PgDn", "One page (also Ctrl+b / Ctrl+f)"),
+        ("Ctrl+u Ctrl+d", "Half a page"),
+        ("Home End", "Top / bottom and follow (also gg / G)"),
+        ("wheel", "Scroll the node under the pointer"),
+        ("F", "Follow the logs again"),
+        ("Space", "Resume frozen panes, else freeze all"),
+    ]),
+    ("SEARCH", &[
+        ("/", "Highlight terms, comma-separated (up to 6)"),
+        ("", "in the box: Ctrl+w drops a term, Ctrl+u all"),
+        ("n N", "Next / previous match"),
+        ("Ctrl+g", "Filter: only matching lines / show all"),
+        ("c", "Clear the search and the filter"),
+    ]),
+    ("NETWORK (focused node)", &[
+        ("s", "Stop / continue (SIGSTOP)"),
+        ("i", "Isolate / heal"),
+        ("p", "Split the network here / heal"),
+        ("r", "Restart"),
+        ("x", "Shut down all nodes (their logs stay)"),
+        ("q", "Quit"),
+        ("?", "This help"),
+    ]),
+];
+
+/// Width of one column of keys: 2 indent, 15 key, 44 description
+const COLUMN: u16 = 61;
+
+/// The keys screen: one column, two side by side when one does not fit the height, and
+/// scrolled from `scroll` when neither fits
 pub fn render(f: &mut Frame, esc_clears_search: bool, scroll: &Cell<u16>) {
     let area = f.size();
-    
-    // Create a centered popup
-    let popup_width = 70.min(area.width.saturating_sub(4));
-    let popup_height = 44.min(area.height.saturating_sub(2));
-    
-    let popup_area = Rect {
-        x: (area.width - popup_width) / 2,
-        y: (area.height - popup_height) / 2,
-        width: popup_width,
-        height: popup_height,
-    };
-    
-    // Clear the popup area
-    f.render_widget(Clear, popup_area);
-    
-    let help_text = r#"
-                        JAMBOREE KEYS
-                        =============
-
-  NODES
-  ─────────────────────────────────────────────────────
-  ← → / h l / Tab Focus previous / next node
-  click           Focus a node; double-click to zoom
-  Enter / z       Zoom into the focused node
-  Esc             {esc}
-  1-6             Hide or show node 0 to 5
-
-  SCROLL (freezes the focused pane; the others follow)
-  ─────────────────────────────────────────────────────
-  ↑ ↓ / j k       One line
-  PgUp PgDn       One page (also Ctrl+b / Ctrl+f)
-  Ctrl+u Ctrl+d   Half a page
-  Home End        Top / bottom and follow again (also gg / G)
-  wheel           Scroll the node under the pointer
-  F               Follow the logs again
-  Space           Resume frozen panes, else freeze all
-
-  SEARCH
-  ─────────────────────────────────────────────────────
-  /               Search: highlight terms, comma-separated (up to 6)
-                  in the box: Ctrl+w drops the last term, Ctrl+u all
-  n N             Next / previous match
-  Ctrl+g          Filter: only matching lines / show all again
-                  (asks for terms if none)
-  c               Clear the search and the filter
-
-  NETWORK (focused node)
-  ─────────────────────────────────────────────────────
-  s               Stop / continue (SIGSTOP)
-  i               Isolate / heal
-  p               Split the network here / heal
-  r               Restart
-  x               Shut down all nodes (their logs stay)
-  q               Quit
-  ?               This help
-
-  Shift+drag selects text while the mouse is on.
-              ↑↓ scroll, any other key closes
-"#;
-
     let esc = match esc_clears_search {
-        true => "Filter off, then clear search, then back to grid",
+        true => "Filter off, then clear search, then grid",
         false => "Back to the grid / cancel",
     };
-    let text = help_text.replace("{esc}", esc);
-    let last = (text.lines().count() as u16).saturating_sub(popup_height.saturating_sub(2));
+    let lines = |sections: &[(&str, &[(&str, &str)])]| -> Vec<Line<'static>> {
+        let mut lines = Vec::new();
+        for (title, keys) in sections {
+            if !lines.is_empty() {
+                lines.push(Line::default());
+            }
+            lines.push(Line::styled(title.to_string(), Style::default().fg(Color::Cyan).bold()));
+            for (key, what) in keys.iter() {
+                lines.push(Line::from(format!("  {key:<15}{}", what.replace("{esc}", esc))));
+            }
+        }
+        lines
+    };
+    let one = lines(&SECTIONS);
+    let two = [lines(&SECTIONS[..2]), lines(&SECTIONS[2..])];
+    let footer = 2; // borders
+    let fits = |n: usize| n as u16 + footer <= area.height;
+    let columns: Vec<Vec<Line>> = match (fits(one.len()), area.width >= 2 * COLUMN + 4) {
+        (false, true) => two.to_vec(),
+        _ => vec![one],
+    };
+    let tallest = columns.iter().map(|c| c.len()).max().unwrap_or(0) as u16;
+
+    let width = (columns.len() as u16 * COLUMN + 2).min(area.width);
+    let height = (tallest + footer).min(area.height);
+    let popup = Rect {
+        x: (area.width - width) / 2,
+        y: (area.height - height) / 2,
+        width,
+        height,
+    };
+    let last = tallest.saturating_sub(height - footer);
     scroll.set(scroll.get().min(last));
     let title = match last {
-        0 => " Help ",
-        _ => " Help (↑↓ scroll) ",
+        0 => " Keys: any key closes ".to_string(),
+        _ => " Keys: ↑↓ scroll, any other key closes ".to_string(),
     };
-    let paragraph = Paragraph::new(text)
-        .scroll((scroll.get(), 0))
-        .block(
-            Block::default()
-                .title(title)
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan))
-                .style(Style::default().bg(Color::Black)),
-        )
-        .style(Style::default().fg(Color::White));
 
-    f.render_widget(paragraph, popup_area);
+    f.render_widget(Clear, popup);
+    let block = Block::default()
+        .title(title)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan))
+        .style(Style::default().bg(Color::Black).fg(Color::White));
+    let inner = block.inner(popup);
+    f.render_widget(block, popup);
+    let parts = Layout::horizontal(vec![Constraint::Length(COLUMN); columns.len()]).split(inner);
+    for (column, part) in columns.into_iter().zip(parts.iter()) {
+        f.render_widget(Paragraph::new(column).scroll((scroll.get(), 0)), *part);
+    }
 }

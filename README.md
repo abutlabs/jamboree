@@ -304,10 +304,10 @@ jamboree --nodes 6 --move-ports --listen-port 41000 \
 | `c` | Clear the search and the filter |
 | `s` `i` `p` `r` | Stop, isolate, split, restart |
 | `x` | Shut down all nodes (TERM, then KILL after 3 s); their logs stay |
-| `?` | Help (`↑` `↓` scroll it on a short terminal) |
+| `?` | Help (two columns on a short terminal, `↑` `↓` scroll it when even that does not fit) |
 | `q` | Quit (stops all nodes first) |
 
-The mouse is on, so to select text hold Shift while dragging.
+The mouse is on, so to select text hold Shift while dragging (Option in iTerm2).
 
 ### Config file
 
