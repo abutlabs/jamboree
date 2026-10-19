@@ -36,7 +36,7 @@ pub struct Cli {
     #[arg(help_heading = "Start", short, long)]
     pub search: Option<String>,
 
-    /// Replay a folder of *.log files instead of starting nodes
+    /// Open a folder of *.log files instead of starting nodes: a past run, or any other logs
     #[arg(help_heading = "Start", short = 'l', long = "logs")]
     pub log_folder: Option<String>,
 
