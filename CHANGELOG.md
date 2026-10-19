@@ -4,6 +4,8 @@
 
 - The help fits short terminals: no banner, two columns when one is too tall, and it scrolls
   only when neither fits. Shift+drag text selection is listed under NODES.
+- `m` turns the mouse off and on, so a plain drag selects text; the zoomed pane has no side
+  borders, so a selection there is just the log text.
 
 ## 0.6.0
 

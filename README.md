@@ -67,6 +67,9 @@ Every run is saved to `logs/<timestamp>/node_<i>.log`, with the command line in 
 - `c` clears the search and the filter.
 - `Enter` zooms into the focused pane, `Esc` goes back, `1`-`6` hide or show node 0 to 5.
 - `--search 'error,warning'` sets the terms at start, also with `--logs`.
+- To copy log lines: `Enter` to zoom the pane, scroll to them, `m` to turn the mouse off, then
+  drag to select and copy as usual. The zoomed pane has no side borders, so the selection is
+  just the log text. `m` again turns the mouse back on.
 
 ## Read saved logs
 
@@ -304,10 +307,12 @@ jamboree --nodes 6 --move-ports --listen-port 41000 \
 | `c` | Clear the search and the filter |
 | `s` `i` `p` `r` | Stop, isolate, split, restart |
 | `x` | Shut down all nodes (TERM, then KILL after 3 s); their logs stay |
+| `m` | Mouse off, so a plain drag selects text / on again |
 | `?` | Help (two columns on a short terminal, `↑` `↓` scroll it when even that does not fit) |
 | `q` | Quit (stops all nodes first) |
 
-The mouse is on, so to select text hold Shift while dragging (Option in iTerm2).
+While the mouse is on, Shift+drag also selects text (Option+drag in iTerm2), but in the grid it
+takes the borders and neighbouring panes too; zoom first.
 
 ### Config file
 

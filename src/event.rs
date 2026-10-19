@@ -2,7 +2,12 @@ use crate::AppState;
 use crate::ViewMode;
 use crate::net::Net;
 use crate::node::{self, Node};
-use crossterm::event::{KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{
+    DisableMouseCapture, EnableMouseCapture, KeyCode, KeyModifiers, MouseButton, MouseEvent,
+    MouseEventKind,
+};
+use crossterm::execute;
+use std::io::stdout;
 use ratatui::layout::Position;
 use std::time::{Duration, Instant};
 
@@ -243,6 +248,16 @@ pub fn handle_key_event(
         // Shut down every node; the panes keep their logs
         KeyCode::Char('x') if !app.log_viewer_mode => {
             node::stop_all(nodes, Duration::from_secs(3));
+            Action::Continue
+        }
+
+        // Mouse off: a plain drag selects text in the terminal; on again for click and wheel
+        KeyCode::Char('m') => {
+            app.mouse_off = !app.mouse_off;
+            let _ = match app.mouse_off {
+                true => execute!(stdout(), DisableMouseCapture),
+                false => execute!(stdout(), EnableMouseCapture),
+            };
             Action::Continue
         }
 
@@ -694,6 +709,15 @@ mod tests {
         press(&mut ui, &["Esc"]);
         assert!(ui.0.highlight.is_none());
         assert!(matches!(press(&mut ui, &["Esc"]), Action::ChangeView(ViewMode::Grid)));
+    }
+
+    #[test]
+    fn m_turns_the_mouse_off_and_on_again() {
+        let mut ui = panes(1);
+        press(&mut ui, &["m"]);
+        assert!(ui.0.mouse_off);
+        press(&mut ui, &["m"]);
+        assert!(!ui.0.mouse_off);
     }
 
     #[test]

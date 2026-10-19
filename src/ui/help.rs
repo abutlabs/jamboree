@@ -10,7 +10,8 @@ const SECTIONS: [(&str, &[(&str, &str)]); 4] = [
     ("NODES", &[
         ("← → h l Tab", "Focus previous / next node"),
         ("click", "Focus a node; double-click to zoom"),
-        ("Shift+drag", "Select text (Option+drag in iTerm2)"),
+        ("m", "Mouse off: drag selects text (m again: on)"),
+        ("Shift+drag", "Select with the mouse on (iTerm2: Option)"),
         ("Enter z", "Zoom into the focused node"),
         ("Esc", "{esc}"),
         ("1-6", "Hide or show node 0 to 5"),
