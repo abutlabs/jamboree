@@ -11,18 +11,18 @@ the hard bugs show up. Saved logs, from jamboree or anywhere else, open in the s
 
 <img src="assets/demo.gif" alt="jamboree with four Jamixir nodes: each pane lists the blocks its node imported; splitting the network gives the two halves different heads, and healing it brings all four back to one head">
 
+Download a binary for Linux or macOS (x86_64 or arm64) from
+[Releases](https://github.com/jamixir/jamboree/releases/latest). If macOS blocks it, run
+`xattr -d com.apple.quarantine jamboree`. Or build it with
+`cargo install --git https://github.com/jamixir/jamboree`. Then:
+
 ```sh
-cargo install --git https://github.com/jamixir/jamboree
 jamboree --nodes 6 --cmd 'cd ~/src/jamixir && ./node.sh {i}'
 ```
 
 That starts six Jamixir nodes. For any other client, put the command that starts one node in
 `--cmd`; jamboree runs it once per node with `{i}` replaced by 0, 1, 2, ... Linux and macOS,
 no root. From a clone, `cargo run -- <args>` works the same.
-
-No Rust? Download a binary for Linux or macOS (x86_64 or arm64) from
-[Releases](https://github.com/jamixir/jamboree/releases/latest). If macOS blocks it, run
-`xattr -d com.apple.quarantine jamboree`.
 
 Built while developing [Jamixir](https://jamixir.org).
 
@@ -41,9 +41,16 @@ jamboree --cmd 'theirs[4]=./their-jam-node <flags for node {i}>' \
 
 That is six nodes: `theirs 0` to `theirs 3`, then `mine 4` and `mine 5`.
 
-The placeholders are `{i}`, `{port}` (the port the node listens on, also `$PORT`),
-`{container}` (see Docker) and `{telemetry}` (see JIP-3 telemetry, also `$TELEMETRY`). Any other
-`{word}` is an error. `--dry-run` prints each node's command and exits.
+Placeholders in `--cmd`:
+
+| Placeholder | Becomes | Also as |
+| --- | --- | --- |
+| `{i}` | the node index: 0, 1, 2, ... | |
+| `{port}` | the port the node listens on | `$PORT` |
+| `{telemetry}` | a HOST:PORT for the node's telemetry, see [JIP-3 telemetry](#jip-3-telemetry) | `$TELEMETRY` |
+| `{container}` | a container name for `docker run --name`, see Docker under [Recipes](#recipes) | |
+
+Any other `{word}` is an error. `--dry-run` prints each node's command and exits.
 
 Every run is saved to `logs/<timestamp>/node_<i>.log`, with the command line in `cmd.txt`.
 
@@ -81,8 +88,9 @@ listens there, and writes these events in the node's pane and log:
 | Peer misbehaved | `[jip3] peer misbehaved: <first 4 bytes of its peer ID>: <reason>` |
 
 These lines look the same for every client, so one search follows a hash or a failure across
-a mixed network, and `--head jip3` (see below) checks the heads without a regex. A restarted
-node connects again.
+a mixed network. They also give the head check in [Run in CI](#run-in-ci) its input:
+`--head jip3` compares the nodes' last best block and `--head jip3-final` their last finalized
+block, with no regex per client. A restarted node connects again.
 
 ```sh
 # six Jamixir nodes; Ctrl+G with the search below lists each node's best blocks
@@ -94,7 +102,7 @@ jamboree --cmd 'theirs[4]=./their-jam-node <flags for node {i}> --telemetry {tel
          --cmd 'mine[2]=./my-jam-node <flags for node {i}> --telemetry {telemetry}'
 ```
 
-`--dry-run` shows the address each node gets. For CI, see `--head jip3` below.
+`--dry-run` shows the address each node gets.
 
 ## Break the network
 
@@ -130,12 +138,19 @@ between nodes by 80-120ms and drops 1% of them, in each direction, for the whole
 ## Run in CI
 
 `--headless DURATION` runs the same network without the UI, then stops the nodes. With
-`--head`, it checks that every node ended on the same head and exits 1 if not:
+`--head`, it checks that every node ended on the same head and exits 1 if not. That puts a
+whole network run into a team's test cycle: a script or CI job can replay a fixed `--fault`
+scenario, or run `--chaos SEED` with a new seed each night, and fail when the nodes disagree:
 
 ```sh
+# a fixed scenario
 jamboree --nodes 6 --cmd 'cd ~/src/jamixir && ./node.sh {i} --telemetry {telemetry}' \
   --fault '60s split 0,1,2,3/4,5' --fault '120s heal' \
   --headless 3m --head jip3
+
+# a nightly chaos run; a failing seed reruns the same schedule (also saved in faults.txt)
+jamboree --nodes 6 --cmd 'cd ~/src/jamixir && ./node.sh {i} --telemetry {telemetry}' \
+  --chaos "$(date +%Y%m%d)" --headless 10m --head jip3
 ```
 
 `--head jip3` takes each node's last best block from its [JIP-3 telemetry](#jip-3-telemetry),
