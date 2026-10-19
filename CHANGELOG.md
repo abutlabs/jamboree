@@ -3,6 +3,9 @@
 ## Unreleased
 
 - `Ctrl+G` with no search terms opens the search box, so typed terms no longer reach the node keys.
+- Search and filter are named apart in the menu: `[/] Search`, `[^G] Filter` (`Show all` while on,
+  with `[FILTER: matching lines only]`). `c` clears both; in the search box `Ctrl+W` drops the
+  last term and `Ctrl+U` all of them.
 
 ## 0.4.0
 

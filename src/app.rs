@@ -1,4 +1,4 @@
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::layout::Rect;
 use std::cell::RefCell;
 use std::time::Instant;
@@ -133,8 +133,16 @@ impl AppState {
         }
     }
 
-    pub fn handle_search_key(&mut self, key: KeyCode) {
+    pub fn handle_search_key(&mut self, key: KeyCode, modifiers: KeyModifiers) {
+        let ctrl = modifiers.contains(KeyModifiers::CONTROL);
         match key {
+            // Ctrl+W drops the last term, Ctrl+U the whole line
+            KeyCode::Char('w') if ctrl => {
+                let keep = self.search_input.rfind(',').unwrap_or(0);
+                self.search_input.truncate(keep);
+            }
+            KeyCode::Char('u') if ctrl => self.search_input.clear(),
+            KeyCode::Char(_) if ctrl => {}
             KeyCode::Esc => {
                 self.search_mode = false;
                 self.search_input.clear();
@@ -191,6 +199,12 @@ impl AppState {
     }
 
     /// Toggle grep mode (filter lines vs highlight only)
+    /// Drop the search terms and show all lines again
+    pub fn clear_search(&mut self) {
+        self.highlight = None;
+        self.grep_mode = false;
+    }
+
     pub fn toggle_grep_mode(&mut self) {
         self.grep_mode = !self.grep_mode;
     }
