@@ -240,7 +240,7 @@ the next package will name; with `--state` it reuses a service already running t
 
 ## Recipes
 
-Runs PolkaJam (release binary) and Jamixir networks.
+Runs PolkaJam (release binary), Jamixir and lasair networks, and mixed ones.
 
 <details>
 <summary>Jamixir</summary>
@@ -276,6 +276,47 @@ jamboree --cmd 'polkajam[4]=polkajam --chain dev run --temp --dev-validator {i} 
 
 Panes are titled `polkajam 0` to `polkajam 3` and `mine 4`. Your client's flags will
 differ. An all-caps `NAME=value` at the start, like `RUST_LOG=debug`, is a variable; a lowercase one is read as a label, so put `env` in front.
+</details>
+
+<details>
+<summary>lasair</summary>
+
+[lasair](https://github.com/abutlabs/lasair) dials its peers itself: each at its genesis port,
+with the dev account's peer id, which `lasair --dev-account k` prints. Alone, lasair runs
+chain-paced from genesis, a slot every 6 s; next to PolkaJam it takes wall-clock slots with
+`--wall` (below). `--guarantor` takes work-packages on `--builder-port`.
+
+```sh
+polkajam --chain dev dump-spec spec.json      # a genesis with the Bootstrap service in it
+for i in 0 1 2 3 4 5; do
+  for k in 0 1 2 3 4 5; do [ $k = $i ] || printf '127.0.0.1:%d@%s,' $((40000+k)) \
+    "$(lasair --dev-account $k | awk '/^peer_id:/{print $2}')"; done | sed 's/,$//' > peers_$i.txt
+done
+jamboree --nodes 6 --move-ports --cmd 'lasair=lasair --dev-validator {i} --genesis-spec spec.json \
+  --port {port} --peers $(cat peers_{i}.txt) --guarantor --builder-port $((42100+{i})) \
+  --interval 6 --telemetry {telemetry}'
+```
+</details>
+
+<details>
+<summary>Mixed clients: three PolkaJam nodes and three lasair nodes</summary>
+
+The same `spec.json` and `peers_*.txt` as above. Both clients on GRANDPA: PolkaJam's default
+finality is a dummy that finalizes its best block alone, and lasair, holding three of six
+votes, would never finalize.
+
+```sh
+jamboree --move-ports \
+  --cmd 'polkajam[3]=polkajam --chain spec.json run --temp --pvm-backend interpreter \
+         --finality-mode grandpa --dev-validator {i} --port {port} --telemetry {telemetry}' \
+  --cmd 'lasair[3]=lasair --dev-validator {i} --genesis-spec spec.json --port {port} \
+         --peers $(cat peers_{i}.txt) --guarantor --builder-port $((42100+{i})) --interval 1 --wall \
+         --telemetry {telemetry}'
+```
+
+Use a PolkaJam release whose PVM gas matches your lasair (PolkaJam v0.8.0 and lasair after the
+v0.8.0 vectors' cmov rule): otherwise the first accumulate that differs by a gas unit forks
+the net.
 </details>
 
 <details>
