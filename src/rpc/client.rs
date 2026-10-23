@@ -157,8 +157,10 @@ impl Client {
     pub fn work_package_status(&mut self, at: &[u8; 32], package: &[u8; 32], anchor: &[u8; 32]) -> Result<Value> {
         self.call("workPackageStatus", json!([b64(at), b64(package), b64(anchor)]), true)
     }
-    pub fn submit_work_package(&mut self, core: u32, package: &[u8]) -> Result<Value> {
-        self.call("submitWorkPackage", json!([core, b64(package), []]), false)
+    /// JIP-2 submitWorkPackage: the encoded package, and the extrinsic data its items reference.
+    pub fn submit_work_package(&mut self, core: u32, package: &[u8], extrinsics: &[Vec<u8>]) -> Result<Value> {
+        let xs: Vec<Value> = extrinsics.iter().map(|x| b64(x)).collect();
+        self.call("submitWorkPackage", json!([core, b64(package), xs]), false)
     }
     pub fn submit_preimage(&mut self, service: u32, preimage: &[u8]) -> Result<Value> {
         self.call("submitPreimage", json!([service, b64(preimage)]), false)

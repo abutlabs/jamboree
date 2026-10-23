@@ -72,14 +72,18 @@ impl RefineContext {
     }
 }
 
-/// One work-item for `service`: its code hash, the payload, the gas limits; no imports,
-/// exports or extrinsics.
+/// One work-item for `service`: its code hash, the payload, the gas limits, and its extrinsics
+/// (data that travels beside the package, not in it: JAM-NP limits the package to 200 KiB,
+/// while extrinsics count only toward W_B); no imports or exports.
 pub struct WorkItem {
     pub service: u32,
     pub code_hash: [u8; 32],
     pub payload: Vec<u8>,
     pub refine_gas: u64,
     pub accumulate_gas: u64,
+    pub extrinsics: Vec<Vec<u8>>,
+    /// how many segments refine will export (GP: the report must export exactly this many)
+    pub export_count: u16,
 }
 
 impl WorkItem {
@@ -89,10 +93,15 @@ impl WorkItem {
         b.extend_from_slice(&self.code_hash);
         b.extend_from_slice(&self.refine_gas.to_le_bytes());
         b.extend_from_slice(&self.accumulate_gas.to_le_bytes());
-        b.extend_from_slice(&0u16.to_le_bytes()); // export count
+        b.extend_from_slice(&self.export_count.to_le_bytes());
         b.extend(var(&self.payload));
         b.extend(enc_nat(0)); // imports
-        b.extend(enc_nat(0)); // extrinsics
+        // extrinsics, by reference: GP C.29, (blake2b-256 of the data, E4(length)) each
+        b.extend(enc_nat(self.extrinsics.len() as u64));
+        for x in &self.extrinsics {
+            b.extend_from_slice(&blake2b256(x));
+            b.extend_from_slice(&(x.len() as u32).to_le_bytes());
+        }
         b
     }
 }
@@ -171,9 +180,25 @@ mod tests {
             anchor: [2; 32], anchor_slot: 5, state_root: [3; 32], beefy_root: [4; 32],
             lookup_anchor: [5; 32], lookup_anchor_slot: 4, lookup_anchor_state_root: [6; 32],
         };
-        let item = WorkItem { service: 9, code_hash: [7; 32], payload: vec![0xaa, 0xbb], refine_gas: 10, accumulate_gas: 20 };
+        let item = WorkItem { service: 9, code_hash: [7; 32], payload: vec![0xaa, 0xbb], refine_gas: 10, accumulate_gas: 20, extrinsics: vec![], export_count: 0 };
         let p = encode_package(&auth, &ctx, &[item]).unwrap();
         // jamswap's workpackage.py encodes the same package to exactly these bytes
         assert_eq!(hex::encode(p), "000000000101010101010101010101010101010101010101010101010101010101010101020202020202020202020202020202020202020202020202020202020202020205000000030303030303030303030303030303030303030303030303030303030303030304040404040404040404040404040404040404040404040404040404040404040505050505050505050505050505050505050505050505050505050505050505040000000606060606060606060606060606060606060606060606060606060606060606000000010900000007070707070707070707070707070707070707070707070707070707070707070a000000000000001400000000000000000002aabb0000");
+    }
+
+    #[test]
+    fn extrinsics_are_referenced_by_hash_and_length() {
+        // GP C.29: a work-item ends with its extrinsics as (blake2b-256, E4(length)) pairs
+        let xs = vec![vec![1u8; 300], vec![2u8; 5]];
+        let item = WorkItem { service: 9, code_hash: [7; 32], payload: vec![0xaa], refine_gas: 10, accumulate_gas: 20, extrinsics: xs.clone(), export_count: 0 };
+        let enc = item.encode();
+        let mut tail = enc_nat(2);
+        for x in &xs {
+            tail.extend_from_slice(&blake2b256(x));
+            tail.extend_from_slice(&(x.len() as u32).to_le_bytes());
+        }
+        assert!(enc.ends_with(&tail));
+        let none = WorkItem { extrinsics: vec![], ..item };
+        assert_eq!(enc.len() - none.encode().len(), 2 * 36);
     }
 }

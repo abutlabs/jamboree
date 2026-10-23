@@ -52,6 +52,13 @@ enum Cmd {
     Submit {
         service: u32,
         payload: String,
+        /// Extrinsic data for the work-item (0x-hex, or @file), repeatable; it travels beside the
+        /// package, so it is not held to JAM-NP's 200 KiB package limit
+        #[arg(long)]
+        extrinsic: Vec<String>,
+        /// Segments the work-item's refine will export (the report must match it)
+        #[arg(long, default_value_t = 0)]
+        exports: u16,
         /// Only this core (a chain of dependent packages stays on one core)
         #[arg(long)]
         core: Option<u32>,
@@ -115,8 +122,9 @@ pub fn main(args: Vec<String>) -> Result<()> {
                 None => println!("(none)"),
             }
         }
-        Cmd::Submit { service, payload, core, wait, timeout } => {
-            let r = c.submit(service, &bytes_arg(&payload, true)?, core)?;
+        Cmd::Submit { service, payload, extrinsic, exports, core, wait, timeout } => {
+            let xs = extrinsic.iter().map(|x| bytes_arg(x, true)).collect::<Result<Vec<_>>>()?;
+            let r = c.submit(service, &bytes_arg(&payload, true)?, &xs, exports, core)?;
             println!("{r}");
             if wait {
                 let (package, anchor) = (hex32(r["package_hash"].as_str().unwrap())?, hex32(r["anchor"].as_str().unwrap())?);
@@ -220,7 +228,7 @@ impl Chain {
     }
 
     /// One package carrying one work-item for `service`, with all the gas a package allows.
-    fn package(&mut self, service: u32, payload: &[u8]) -> Result<(Vec<u8>, Block)> {
+    fn package(&mut self, service: u32, payload: &[u8], extrinsics: &[Vec<u8>], export_count: u16) -> Result<(Vec<u8>, Block)> {
         let (auth, _) = self.authorizer()?;
         let anchor = self.anchor()?;
         let lookup = self.lookup_anchor(anchor)?;
@@ -235,18 +243,19 @@ impl Chain {
         if g_a - 1 < info.min_item_gas {
             bail!("service {service} wants {} accumulate gas per item; a package allows {}", info.min_item_gas, g_a - 1);
         }
-        let item = WorkItem { service, code_hash: info.code_hash, payload: payload.to_vec(), refine_gas: g_r - 1, accumulate_gas: g_a - 1 };
+        let item = WorkItem { service, code_hash: info.code_hash, payload: payload.to_vec(), refine_gas: g_r - 1, accumulate_gas: g_a - 1,
+                          extrinsics: extrinsics.to_vec(), export_count };
         Ok((encode_package(&auth, &ctx, &[item])?, anchor))
     }
 
     /// Submit to the next core (round robin over those the authorizer's pool covers, or `core`).
-    fn submit(&mut self, service: u32, payload: &[u8], core: Option<u32>) -> Result<Value> {
-        let (package, anchor) = self.package(service, payload)?;
+    fn submit(&mut self, service: u32, payload: &[u8], extrinsics: &[Vec<u8>], export_count: u16, core: Option<u32>) -> Result<Value> {
+        let (package, anchor) = self.package(service, payload, extrinsics, export_count)?;
         let cores = match core { Some(c) => vec![c], None => self.authorizer()?.1 };
         let mut refused = vec![];
         for k in 0..cores.len() {
             let c = cores[(self.next_core + k) % cores.len()];
-            match self.rpc.submit_work_package(c, &package) {
+            match self.rpc.submit_work_package(c, &package, extrinsics) {
                 Ok(_) => {
                     self.next_core = (self.next_core + k + 1) % cores.len();
                     return Ok(json!({"accepted": true, "package_hash": hex::encode(blake2b256(&package)), "core": c,
@@ -382,7 +391,7 @@ impl Deploy<'_> {
         let expiry = self.c.param("recent_block_count").unwrap_or(8) as u32 + 6;
         let send = |d: &mut Self| -> Result<Value> {
             let payload = create_service_payload(&hash, d.code.len() as u64, endowment, memo, Some(sid));
-            let r = d.c.submit(d.bootstrap, &payload, None)?;
+            let r = d.c.submit(d.bootstrap, &payload, &[], 0, None)?;
             eprintln!("deploy: CreateService(id {sid}, {} bytes, endowment {endowment}): package {}.. on core {}, anchor #{}",
                 d.code.len(), &r["package_hash"].as_str().unwrap()[..16], r["core"], r["anchor_slot"]);
             Ok(r)
