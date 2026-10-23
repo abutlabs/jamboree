@@ -84,6 +84,37 @@ pub struct WorkItem {
     pub extrinsics: Vec<Vec<u8>>,
     /// how many segments refine will export (GP: the report must export exactly this many)
     pub export_count: u16,
+    /// segments to import: (hash, index, the hash is a work-package hash rather than a segments root)
+    pub imports: Vec<Import>,
+}
+
+/// One imported segment (GP C.30, I(h, i)): a segments root and an index, or a work-package
+/// hash (the tagged form, h^+) whose index carries 2^15; the guarantor resolves it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Import {
+    pub hash: [u8; 32],
+    pub index: u16,
+    pub by_package: bool,
+}
+
+impl Import {
+    /// "root:<hex>:<i>" or "pkg:<hex>:<i>"
+    pub fn parse(s: &str) -> Result<Self> {
+        let mut p = s.splitn(3, ':');
+        let (kind, h, i) = (p.next().unwrap_or(""), p.next().unwrap_or(""), p.next().unwrap_or(""));
+        let by_package = match kind { "root" => false, "pkg" => true, _ => bail!("import {s}: root:<hash>:<i> or pkg:<hash>:<i>") };
+        let raw = hex::decode(h.trim_start_matches("0x"))?;
+        let hash: [u8; 32] = raw.try_into().map_err(|_| anyhow::anyhow!("import {s}: a 32-byte hash"))?;
+        let index: u16 = i.parse()?;
+        if index >= 1 << 15 { bail!("import {s}: index below 2^15"); }
+        Ok(Import { hash, index, by_package })
+    }
+
+    fn encode(&self) -> Vec<u8> {
+        let mut b = self.hash.to_vec();
+        b.extend_from_slice(&(self.index | if self.by_package { 1 << 15 } else { 0 }).to_le_bytes());
+        b
+    }
 }
 
 impl WorkItem {
@@ -95,7 +126,10 @@ impl WorkItem {
         b.extend_from_slice(&self.accumulate_gas.to_le_bytes());
         b.extend_from_slice(&self.export_count.to_le_bytes());
         b.extend(var(&self.payload));
-        b.extend(enc_nat(0)); // imports
+        b.extend(enc_nat(self.imports.len() as u64));
+        for i in &self.imports {
+            b.extend(i.encode());
+        }
         // extrinsics, by reference: GP C.29, (blake2b-256 of the data, E4(length)) each
         b.extend(enc_nat(self.extrinsics.len() as u64));
         for x in &self.extrinsics {
@@ -180,7 +214,7 @@ mod tests {
             anchor: [2; 32], anchor_slot: 5, state_root: [3; 32], beefy_root: [4; 32],
             lookup_anchor: [5; 32], lookup_anchor_slot: 4, lookup_anchor_state_root: [6; 32],
         };
-        let item = WorkItem { service: 9, code_hash: [7; 32], payload: vec![0xaa, 0xbb], refine_gas: 10, accumulate_gas: 20, extrinsics: vec![], export_count: 0 };
+        let item = WorkItem { service: 9, code_hash: [7; 32], payload: vec![0xaa, 0xbb], refine_gas: 10, accumulate_gas: 20, extrinsics: vec![], export_count: 0, imports: vec![] };
         let p = encode_package(&auth, &ctx, &[item]).unwrap();
         // jamswap's workpackage.py encodes the same package to exactly these bytes
         assert_eq!(hex::encode(p), "000000000101010101010101010101010101010101010101010101010101010101010101020202020202020202020202020202020202020202020202020202020202020205000000030303030303030303030303030303030303030303030303030303030303030304040404040404040404040404040404040404040404040404040404040404040505050505050505050505050505050505050505050505050505050505050505040000000606060606060606060606060606060606060606060606060606060606060606000000010900000007070707070707070707070707070707070707070707070707070707070707070a000000000000001400000000000000000002aabb0000");
@@ -190,7 +224,7 @@ mod tests {
     fn extrinsics_are_referenced_by_hash_and_length() {
         // GP C.29: a work-item ends with its extrinsics as (blake2b-256, E4(length)) pairs
         let xs = vec![vec![1u8; 300], vec![2u8; 5]];
-        let item = WorkItem { service: 9, code_hash: [7; 32], payload: vec![0xaa], refine_gas: 10, accumulate_gas: 20, extrinsics: xs.clone(), export_count: 0 };
+        let item = WorkItem { service: 9, code_hash: [7; 32], payload: vec![0xaa], refine_gas: 10, accumulate_gas: 20, extrinsics: xs.clone(), export_count: 0, imports: vec![] };
         let enc = item.encode();
         let mut tail = enc_nat(2);
         for x in &xs {
@@ -200,5 +234,23 @@ mod tests {
         assert!(enc.ends_with(&tail));
         let none = WorkItem { extrinsics: vec![], ..item };
         assert_eq!(enc.len() - none.encode().len(), 2 * 36);
+    }
+
+    #[test]
+    fn imports_by_root_and_by_package() {
+        // GP C.30: (h, E2(i)) for a segments root, (r, E2(i + 2^15)) for a work-package hash
+        let r = Import::parse(&format!("root:{}:5", "11".repeat(32))).unwrap();
+        let p = Import::parse(&format!("pkg:0x{}:5", "22".repeat(32))).unwrap();
+        assert_eq!(&r.encode()[32..], &5u16.to_le_bytes());
+        assert_eq!(&p.encode()[32..], &(5u16 + (1 << 15)).to_le_bytes());
+        assert!(Import::parse(&format!("pkg:{}:32768", "22".repeat(32))).is_err());
+        let item = WorkItem { service: 1, code_hash: [0; 32], payload: vec![], refine_gas: 1, accumulate_gas: 1,
+                              extrinsics: vec![], export_count: 0, imports: vec![r.clone(), p.clone()] };
+        let enc = item.encode();
+        let mut want = enc_nat(2);
+        want.extend(r.encode());
+        want.extend(p.encode());
+        want.extend(enc_nat(0)); // no extrinsics
+        assert!(enc.ends_with(&want));
     }
 }

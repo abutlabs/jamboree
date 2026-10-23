@@ -59,6 +59,10 @@ enum Cmd {
         /// Segments the work-item's refine will export (the report must match it)
         #[arg(long, default_value_t = 0)]
         exports: u16,
+        /// A segment to import, root:<hash>:<i> (a segments root) or pkg:<hash>:<i> (a
+        /// work-package hash, resolved by the guarantor); repeatable
+        #[arg(long)]
+        import: Vec<String>,
         /// Only this core (a chain of dependent packages stays on one core)
         #[arg(long)]
         core: Option<u32>,
@@ -71,6 +75,9 @@ enum Cmd {
     },
     /// JIP-2 workPackageStatus of a package, at the best block
     Status { package: String, anchor: String },
+    /// JIP-2 workReport: a report by its hash (hex or base64, as Status prints it); prints its
+    /// package spec: package hash, bundle length, erasure root, segments root, export count
+    Report { hash: String },
     /// Deploy a service blob through the Bootstrap service; prints SERVICE_ID=<id>
     Deploy {
         code: PathBuf,
@@ -122,9 +129,10 @@ pub fn main(args: Vec<String>) -> Result<()> {
                 None => println!("(none)"),
             }
         }
-        Cmd::Submit { service, payload, extrinsic, exports, core, wait, timeout } => {
+        Cmd::Submit { service, payload, extrinsic, exports, import, core, wait, timeout } => {
             let xs = extrinsic.iter().map(|x| bytes_arg(x, true)).collect::<Result<Vec<_>>>()?;
-            let r = c.submit(service, &bytes_arg(&payload, true)?, &xs, exports, core)?;
+            let imports = import.iter().map(|s| wp::Import::parse(s)).collect::<Result<Vec<_>>>()?;
+            let r = c.submit(service, &bytes_arg(&payload, true)?, &xs, exports, &imports, core)?;
             println!("{r}");
             if wait {
                 let (package, anchor) = (hex32(r["package_hash"].as_str().unwrap())?, hex32(r["anchor"].as_str().unwrap())?);
@@ -143,6 +151,17 @@ pub fn main(args: Vec<String>) -> Result<()> {
             }
         }
         Cmd::Status { package, anchor } => println!("{}", json!({"status": c.status(&hex32(&package)?, &hex32(&anchor)?)?})),
+        Cmd::Report { hash } => {
+            let h = hex32(&hash).or_else(|_| client::hash32(&Value::String(hash.clone())))?;
+            let r = client::unb64(&c.rpc.call("workReport", json!([client::b64(&h)]), false)?)?;
+            // GP 0.8.0 C (serialization.tex 208-215): a report opens with its package spec,
+            // (h, E4(bundle length), erasure root, E2(erasure shards), segments root, E2(exports))
+            if r.len() < 104 { bail!("workReport: {} bytes, too short for a package spec", r.len()); }
+            println!("{}", json!({"package_hash": hex::encode(&r[0..32]),
+                "bundle_length": u32::from_le_bytes(r[32..36].try_into()?), "erasure_root": hex::encode(&r[36..68]),
+                "erasure_shards": u16::from_le_bytes(r[68..70].try_into()?),
+                "segments_root": hex::encode(&r[70..102]), "exports": u16::from_le_bytes(r[102..104].try_into()?)}));
+        }
         Cmd::Deploy { code, id, state, fresh, endowment, bootstrap, timeout } => {
             let blob = std::fs::read(&code).with_context(|| format!("read {}", code.display()))?;
             let sid = Deploy { c: &mut c, code: blob, bootstrap, deadline: Instant::now() + Duration::from_secs(timeout) }
@@ -228,7 +247,7 @@ impl Chain {
     }
 
     /// One package carrying one work-item for `service`, with all the gas a package allows.
-    fn package(&mut self, service: u32, payload: &[u8], extrinsics: &[Vec<u8>], export_count: u16) -> Result<(Vec<u8>, Block)> {
+    fn package(&mut self, service: u32, payload: &[u8], extrinsics: &[Vec<u8>], export_count: u16, imports: &[wp::Import]) -> Result<(Vec<u8>, Block)> {
         let (auth, _) = self.authorizer()?;
         let anchor = self.anchor()?;
         let lookup = self.lookup_anchor(anchor)?;
@@ -244,13 +263,13 @@ impl Chain {
             bail!("service {service} wants {} accumulate gas per item; a package allows {}", info.min_item_gas, g_a - 1);
         }
         let item = WorkItem { service, code_hash: info.code_hash, payload: payload.to_vec(), refine_gas: g_r - 1, accumulate_gas: g_a - 1,
-                          extrinsics: extrinsics.to_vec(), export_count };
+                          extrinsics: extrinsics.to_vec(), export_count, imports: imports.to_vec() };
         Ok((encode_package(&auth, &ctx, &[item])?, anchor))
     }
 
     /// Submit to the next core (round robin over those the authorizer's pool covers, or `core`).
-    fn submit(&mut self, service: u32, payload: &[u8], extrinsics: &[Vec<u8>], export_count: u16, core: Option<u32>) -> Result<Value> {
-        let (package, anchor) = self.package(service, payload, extrinsics, export_count)?;
+    fn submit(&mut self, service: u32, payload: &[u8], extrinsics: &[Vec<u8>], export_count: u16, imports: &[wp::Import], core: Option<u32>) -> Result<Value> {
+        let (package, anchor) = self.package(service, payload, extrinsics, export_count, imports)?;
         let cores = match core { Some(c) => vec![c], None => self.authorizer()?.1 };
         let mut refused = vec![];
         for k in 0..cores.len() {
@@ -391,7 +410,7 @@ impl Deploy<'_> {
         let expiry = self.c.param("recent_block_count").unwrap_or(8) as u32 + 6;
         let send = |d: &mut Self| -> Result<Value> {
             let payload = create_service_payload(&hash, d.code.len() as u64, endowment, memo, Some(sid));
-            let r = d.c.submit(d.bootstrap, &payload, &[], 0, None)?;
+            let r = d.c.submit(d.bootstrap, &payload, &[], 0, &[], None)?;
             eprintln!("deploy: CreateService(id {sid}, {} bytes, endowment {endowment}): package {}.. on core {}, anchor #{}",
                 d.code.len(), &r["package_hash"].as_str().unwrap()[..16], r["core"], r["anchor_slot"]);
             Ok(r)
