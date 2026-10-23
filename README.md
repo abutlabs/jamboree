@@ -281,7 +281,8 @@ differ. An all-caps `NAME=value` at the start, like `RUST_LOG=debug`, is a varia
 <details>
 <summary>lasair</summary>
 
-[lasair](https://github.com/abutlabs/lasair) dials its peers itself: each at its genesis port,
+lasair (an independent GP 0.8.0 client; Linux images at `ghcr.io/abutlabs/lasair`, the source not
+yet public) dials its peers itself: each at its genesis port,
 with the dev account's peer id, which `lasair --dev-account k` prints. Alone, lasair runs
 chain-paced from genesis, a slot every 6 s; next to PolkaJam it takes wall-clock slots with
 `--wall` (below). `--guarantor` takes work-packages on `--builder-port`.
@@ -314,9 +315,9 @@ jamboree --move-ports \
          --telemetry {telemetry}'
 ```
 
-Use a PolkaJam release whose PVM gas matches your lasair (PolkaJam v0.8.0 and lasair after the
-v0.8.0 vectors' cmov rule): otherwise the first accumulate that differs by a gas unit forks
-the net.
+Use a PolkaJam release whose PVM gas matches your lasair build (PolkaJam v0.8.0 with a lasair
+that applies the v0.8.0 vectors' cmov gas rule): otherwise the first accumulate that differs
+by a gas unit forks the net.
 </details>
 
 <details>
