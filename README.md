@@ -211,6 +211,33 @@ Clients shorten hashes differently, so there capture something they print alike,
 | PBnJam | `"blockHash":"(0x[0-9a-f]+)` |
 </details>
 
+## Talk to the network: `jamboree rpc`
+
+Once a network runs, `jamboree rpc` reads its state, submits work-packages and deploys
+services over [JIP-2](https://github.com/polkadot-fellows/JIPs), from the chain spec alone,
+so the same commands work against any client that serves JIP-2:
+
+```sh
+R="jamboree rpc --url ws://127.0.0.1:19800 --chain-spec spec.json"
+$R head                                  # best and finalized blocks
+$R authorizer                            # the authorizer the genesis pools accept, and its cores
+$R deploy my-service.jam --state my.json # create it through the Bootstrap service, provide its code
+$R submit 2 0x0102 --wait                # one work-item in its own package; waits for Reported
+$R read 2 0x6e663a…                      # a storage value (0x-hex key, or text)
+$R status <package> <anchor>             # JIP-2 workPackageStatus
+```
+
+`submit` builds a GP 0.8.0 work-package: the best block's parent as the anchor, the finalized
+block's parent as the lookup anchor (the anchor itself if finality lags past the lookup
+window), the service's code hash at the anchor, all the gas a package allows, and the
+authorizer found in the genesis pools (a preimage of some service whose empty-configuration
+hash is in a core's pool; name one with `--authorizer host:code_hash` otherwise). It tries
+the authorizer's cores round robin; `--core N` pins one, which a chain of packages that
+depend on each other needs. `deploy` sends `CreateService` to the Bootstrap service
+(jam-bootstrap-service 0.1.29's layout), resends a package that fails or ages out,
+provides the code with `submitPreimage`, and waits until the code is at the lookup anchor
+the next package will name; with `--state` it reuses a service already running the code.
+
 ## Recipes
 
 Runs PolkaJam (release binary) and Jamixir networks.
