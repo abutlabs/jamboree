@@ -4,6 +4,7 @@ mod event;
 mod jip3;
 mod net;
 mod node;
+mod rpc;
 mod ui;
 mod utils;
 
@@ -126,6 +127,11 @@ impl Drop for TerminalGuard {
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
     // Parse CLI first, before terminal setup (so --help works properly)
+    // `jamboree rpc ...` talks to a running network over JIP-2 (src/rpc)
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("rpc") {
+        return rpc::main(std::iter::once("jamboree rpc".to_string()).chain(args.into_iter().skip(2)).collect());
+    }
     let cli = Cli::parse();
     if cli.print_config {
         print!("{}", cli::DEFAULT_CONFIG);
