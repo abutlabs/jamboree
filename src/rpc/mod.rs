@@ -355,7 +355,8 @@ impl Deploy<'_> {
         let info = self.c.record(sid, None)?.ok_or_else(|| anyhow!("service {sid} vanished while deploying"))?;
         if let Some(p) = state {
             std::fs::write(p, serde_json::to_string_pretty(&json!({"service_id": sid, "code_hash": hex::encode(hash),
-                "bootstrap_id": self.bootstrap, "created": info.created}))?)?;
+                "bootstrap_id": self.bootstrap, "created": info.created}))?)
+                .with_context(|| format!("write {}", p.display()))?;
         }
         eprintln!("deploy: service {sid} ready (created #{}, balance {})", info.created, info.balance);
         Ok(sid)
